@@ -74,7 +74,7 @@
 3. 启动后托盘有图标；设置页可开开机自启和启动最小化。
 4. 改硬件参数前先理解含义；建议备份 `config.yaml`。Curve Optimizer 从很小的负值开始逐核试，过度会蓝屏或死机。
 
-本 fork 目前没有打好的 Releases 安装包，需自行按下面步骤编译。上游安装包见 [GaoXanSheng Releases](https://github.com/GaoXanSheng/JiaolongControl/releases)，功能与本分支不一致。
+本 fork 的便携包见 [Releases](https://github.com/Counkery/JiaolongControl/releases)（`JiaoLongControl-*-win-x64.zip`）。解压后**管理员**运行 `JiaoLongControl.exe`；SMU 需先装 [PawnIO](https://pawnio.eu/)。请先退出闭源第三方控制中心再启动。上游安装包见 [GaoXanSheng Releases](https://github.com/GaoXanSheng/JiaolongControl/releases)，功能与本分支不一致。
 
 ---
 
