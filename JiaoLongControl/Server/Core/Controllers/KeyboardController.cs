@@ -34,7 +34,26 @@ namespace JiaoLongControl.Server.Core.Controllers
 
         public CommandResult SetMode(RGBKeyboardMode mode)
         {
-            var res =  MethodServices.SetValue(MethodName.RGBKeyboardMode, mode);
+            // 关灯前先打断渐变循环，且不恢复旧色，保证 Mode_Off 立即生效
+            if (mode == RGBKeyboardMode.Mode_Off)
+            {
+                try
+                {
+                    Interop.Bridge.Instance.KeyboardGradient.StopImmediate();
+                }
+                catch
+                {
+                    // 渐变未初始化时忽略
+                }
+            }
+
+            var res = MethodServices.SetValue(MethodName.RGBKeyboardMode, mode);
+            if (res && mode == RGBKeyboardMode.Mode_Off)
+            {
+                // 再写一次亮度最低档，兼容部分 EC 仅改 Mode 仍残灯的情况
+                MethodServices.SetValue(MethodName.RGBKeyboardBrightness, (byte)RGBKeyboardBrightnessLevel.Level_0);
+            }
+
             return new CommandResult(res, res ? "设置成功" : "设置失败");
         }
 

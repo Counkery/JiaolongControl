@@ -19,6 +19,10 @@ export interface AppSectionType {
   CpuCurveOptimizerPerCore: boolean
   BootGpuUseAdvancedOffsets: boolean
   Theme: ThemeMode
+  /** CPU 功耗/温度墙周期保活（与监控采集分离） */
+  CpuPowerKeepAliveEnabled: boolean
+  /** 优先 PawnIO，避免 WinRing0 */
+  PreferPawnIO: boolean
   /** 主窗口记忆宽度 (物理像素), 0 = 未记忆, 与显示器 DPI/缩放无关 */
   WindowPixelWidth: number
   /** 主窗口记忆高度 (物理像素), 0 = 未记忆, 与显示器 DPI/缩放无关 */
@@ -56,6 +60,11 @@ export interface GpuSectionType {
 export interface FanSectionType {
   FanCurveMerge: boolean
   ManualFanSpeed: number
+  /** 切换性能模式时恢复绑定风扇 */
+  ApplyFanOnModeChange: boolean
+  QuietModeFanRpm: number
+  BalanceModeFanRpm: number
+  PerformanceModeFanRpm: number
   CpuFanCurve: FanPoint[]
   GpuFanCurve: FanPoint[]
 }

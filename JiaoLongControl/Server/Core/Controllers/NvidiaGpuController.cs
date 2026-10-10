@@ -458,11 +458,20 @@ namespace JiaoLongControl.Server.Core.Controllers
         /// 应用核心/显存频率偏移: 核心偏移 = 整条 V/F 曲线统一平移
         /// (正值超频/负值降压), 显存偏移 = P0 显存频率增量。写入含清零与读回验证,
         /// 未落地自动回滚, 约需 1~2 秒。
+        /// 风险提示：偏移超频可能导致花屏/驱动重置/过热；默认不在开机自启启用高级偏移。
+        /// 建议先小步（±50MHz）验证，并保留一键清零回滚路径。
         /// </summary>
         public CommandResult SetGpuOffsets(int coreOffsetMhz, int memoryOffsetMhz, int gpuIndex = -1)
         {
             try
             {
+                // 温和默认：过大偏移直接拒绝，避免误触激进超频
+                if (Math.Abs(coreOffsetMhz) > 250 || Math.Abs(memoryOffsetMhz) > 1000)
+                {
+                    return new CommandResult(false,
+                        $"偏移超出安全提示范围 (核频±250 / 显存±1000 MHz): core={coreOffsetMhz}, mem={memoryOffsetMhz}");
+                }
+
                 var gpu = GetCurveGpu(gpuIndex);
                 var (coreMin, coreMax) = NvGpuCurveInterop.GetCoreOffsetRangeKhz(gpu);
                 var (memMin, memMax) = GpuCurveTuning.GetMemoryOffsetRangeKhz(gpu);

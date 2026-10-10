@@ -211,6 +211,10 @@ namespace JiaoLongControl.Server.Core.Controllers
                 TaskScheduler.Default);
         }
 
+        /// <summary>
+        /// 仅做状态采集/OSD 展示，禁止在此循环内调用 Set* 下发硬件参数。
+        /// CPU 功耗重应用请走 <see cref="Services.CpuPowerKeepAliveService"/>。
+        /// </summary>
         private void PollLoop(CancellationToken token)
         {
             while (!token.IsCancellationRequested)

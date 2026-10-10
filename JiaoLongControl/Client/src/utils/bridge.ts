@@ -185,6 +185,7 @@ export interface BridgeApi {
   ConfigCtrl: {
     GetConfig(): HostBridgePromise<import('@/types/config').JiaoLongConfigType>
     SetConfig(configJson: string): HostBridgePromise<void>
+    ImportLegacyAppSettings(path: string): HostBridgePromise<unknown>
   }
   AutoStart: {
     Enable(): HostBridgePromise<void>
@@ -556,6 +557,8 @@ export const Config = {
   GetConfig: () => call(raw.ConfigCtrl.GetConfig()),
   SetConfig: (config: import('@/types/config').JiaoLongConfigType) =>
     call(raw.ConfigCtrl.SetConfig(JSON.stringify(config))),
+  /** 从第三方控制中心 AppSettings.json 导入；path 为空则尝试默认路径 */
+  ImportLegacyAppSettings: (path = '') => call(raw.ConfigCtrl.ImportLegacyAppSettings(path)),
 }
 const postMessage = (message: unknown) => {
   if (!window.chrome?.webview) {

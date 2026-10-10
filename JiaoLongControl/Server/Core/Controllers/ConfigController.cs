@@ -37,4 +37,12 @@ public class ConfigController
             return new CommandResult(false, ex.Message);
         }
     }
+
+    /// <summary>从第三方控制中心 AppSettings.json 导入风扇/功耗/温度墙。</summary>
+    public CommandResult ImportLegacyAppSettings(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return AppSettingsImporter.ImportFromDefaultLegacyPath();
+        return AppSettingsImporter.ImportFromFile(path);
+    }
 }

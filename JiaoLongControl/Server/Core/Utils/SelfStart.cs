@@ -25,6 +25,13 @@ public class SelfStart
             }
         }
         if (bridge.Config.App.BootKeyboardGradient) bridge.KeyboardGradient.Start();
+
+        // 即使未开「开机高级 CPU」，仍可按配置启动功耗保活（监控采集不得承担下发）
+        if (bridge.Config.App.CpuPowerKeepAliveEnabled && !bridge.CpuPowerKeepAlive.IsRunning)
+        {
+            bridge.CpuPowerKeepAlive.SyncFromConfig();
+            bridge.CpuPowerKeepAlive.Start();
+        }
     }
 
     private void Fan() { Bridge.Instance.AutoFan.Start(); }
@@ -41,6 +48,11 @@ public class SelfStart
             bridge.Power.EnableTurbo();
         else
             bridge.Power.DisableTurbo();
+
+        // 首次下发后启动保活（与监控采集分离，避免功耗被电源策略冲掉）
+        bridge.CpuPowerKeepAlive.UpdateTarget(cpu.CpuLongPower, cpu.CpuShortPower, cpu.CpuTempWall);
+        if (bridge.Config.App.CpuPowerKeepAliveEnabled)
+            bridge.CpuPowerKeepAlive.Start();
     }
 
     private void GPU()

@@ -86,9 +86,25 @@ public class KeyboardGradientController : IDisposable
 
     public CommandResult Stop()
     {
+        return StopInternal(restoreSnapshot: true);
+    }
+
+    /// <summary>
+    /// 立即停止渐变循环且不恢复快照颜色。
+    /// 用于用户主动关灯：避免 Stop 后把旧颜色写回导致“等一会才灭”。
+    /// </summary>
+    public CommandResult StopImmediate()
+    {
+        return StopInternal(restoreSnapshot: false);
+    }
+
+    private CommandResult StopInternal(bool restoreSnapshot)
+    {
         if (!_isRunning)
             return new CommandResult(true, "键盘渐变灯没有在运行中");
-        Logger.Info("Keyboard gradient stopping...");
+        Logger.Info(restoreSnapshot
+            ? "Keyboard gradient stopping..."
+            : "Keyboard gradient stopping immediately (no snapshot restore)...");
         _cts?.Cancel();
         try
         {
@@ -103,7 +119,9 @@ public class KeyboardGradientController : IDisposable
         {
             _isRunning = false;
         }
-        RestoreSnapshot();
+
+        if (restoreSnapshot)
+            RestoreSnapshot();
         return new CommandResult(true, "键盘渐变灯已停止");
     }
 

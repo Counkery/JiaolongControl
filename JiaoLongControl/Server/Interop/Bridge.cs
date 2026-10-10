@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using JiaoLongControl.Server.Core.Controllers;
 using JiaoLongControl.Server.Core.Models;
+using JiaoLongControl.Server.Core.Services;
 using JiaoLongControl.Server.Core.Utils;
 using log4net;
 using Microsoft.Web.WebView2.Core;
@@ -50,11 +51,15 @@ namespace JiaoLongControl.Server.Interop
         public SystemInfoController SystemInfo { get; } = new();
         public OsdController Osd { get; } = new();
 
+        /// <summary>CPU 功耗保活（与 OSD/监控轮询分离）。</summary>
+        public CpuPowerKeepAliveService CpuPowerKeepAlive { get; } = new();
+
         public void Dispose()
         {
             _saveTimer.Dispose();
             _saveTimer = null;
             FlushIfDirty();
+            CpuPowerKeepAlive.Dispose();
             CPU.Dispose();
             Fan.Dispose();
             AutoFan.Dispose();
@@ -69,6 +74,20 @@ namespace JiaoLongControl.Server.Interop
             lock (_configLock)
             {
                 Config = config;
+            }
+
+            // 配置变更后同步保活目标；采集循环不得直接改硬件
+            try
+            {
+                CpuPowerKeepAlive.SyncFromConfig();
+                if (Config.App.CpuPowerKeepAliveEnabled && !CpuPowerKeepAlive.IsRunning)
+                    CpuPowerKeepAlive.Start();
+                else if (!Config.App.CpuPowerKeepAliveEnabled && CpuPowerKeepAlive.IsRunning)
+                    CpuPowerKeepAlive.Stop();
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"同步 CPU 功耗保活失败: {ex.Message}");
             }
 
             try

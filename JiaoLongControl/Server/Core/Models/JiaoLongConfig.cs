@@ -45,6 +45,12 @@ public class AppSection
     [ConfigComment("界面主题: light / dark / system (默认跟随系统)")]
     public string Theme { get; set; } = "system";
 
+    [ConfigComment("启用 CPU 功耗/温度墙周期保活 (与监控采集分离, 默认开启, 间隔约 30s)")]
+    public bool CpuPowerKeepAliveEnabled { get; set; } = true;
+
+    [ConfigComment("优先使用 PawnIO 驱动路径 (避免 WinRing0); 仅作策略提示, 实际由 Drivers 层决定")]
+    public bool PreferPawnIO { get; set; } = true;
+
     [ConfigComment("主窗口记忆宽度 (物理像素), 0 = 未记忆, 默认按 1300×820 物理像素启动, 不随 DPI/缩放放大, 跨屏物理大小不变")]
     public double WindowPixelWidth { get; set; }
 
@@ -141,6 +147,21 @@ public class FanSection
 
     [ConfigComment("手动风扇转速 (RPM)")]
     public int ManualFanSpeed { get; set; } = 1500;
+
+    [ConfigComment("切换性能模式时是否恢复该模式绑定的手动风扇转速")]
+    public bool ApplyFanOnModeChange { get; set; } = true;
+
+    [ConfigComment("安静模式绑定风扇转速 (RPM), 对应第三方 WorkModeFanSpeedSaveValue 量级换算")]
+    [ConfigRange(0, 6800)]
+    public int QuietModeFanRpm { get; set; } = 2700;
+
+    [ConfigComment("均衡模式绑定风扇转速 (RPM)")]
+    [ConfigRange(0, 6800)]
+    public int BalanceModeFanRpm { get; set; } = 3500;
+
+    [ConfigComment("性能/狂暴模式绑定风扇转速 (RPM), 对应第三方 Fastest/Playing")]
+    [ConfigRange(0, 6800)]
+    public int PerformanceModeFanRpm { get; set; } = 5800;
 
     public List<FanPoint> CpuFanCurve { get; set; } = new()
     {
