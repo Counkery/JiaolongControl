@@ -1,0 +1,293 @@
+using YamlDotNet.Serialization;
+
+namespace JiaoLongControl.Server.Core.Models;
+
+public class JiaoLongConfig
+{
+    public string Version { get; set; } = "";
+    public AppSection App { get; set; } = new();
+    public CpuSection Cpu { get; set; } = new();
+    public GpuSection Gpu { get; set; } = new();
+    public FanSection Fan { get; set; } = new();
+    public SmuSection Smu { get; set; } = new();
+    public OsdSection Osd { get; set; } = new();
+}
+
+public class AppSection
+{
+    [ConfigComment("开机后最小化到托盘")]
+    public bool BootMinimized { get; set; }
+
+    [ConfigComment("开机自动启动高级风扇控制系统")]
+    public bool BootAdvancedFanControlSystem { get; set; }
+
+    [ConfigComment("开机自动启动高级CPU系统")]
+    public bool BootAdvancedCPUSystem { get; set; }
+
+    [ConfigComment("开机自动启动高级GPU系统")]
+    public bool BootAdvancedGPUSystem { get; set; }
+
+    [ConfigComment("开机自动设置Ryzen SMU Curve Optimizer All")]
+    public bool BootSetRyzenSumCurveOptimizerAll { get; set; }
+
+    [ConfigComment("开机自动应用Ryzen SMU Curve Optimizer时使用分核降压 (代替全核)")]
+    public bool BootSetRyzenSmuCurveOptimizerPerCore { get; set; }
+
+    [ConfigComment("开机自动开启键盘渐变")]
+    public bool BootKeyboardGradient { get; set; }
+
+    [ConfigComment("启用后 CPU 页面的核心电压偏移替换为分核心降压 (应用时逐核心写入 Curve Optimizer Per Core 数值)")]
+    public bool CpuCurveOptimizerPerCore { get; set; }
+
+    [ConfigComment("开机自动应用GPU参数时改用高级超频数值 (频率偏移代替频率锁定)")]
+    public bool BootGpuUseAdvancedOffsets { get; set; }
+
+    [ConfigComment("界面主题: light / dark / system (默认跟随系统)")]
+    public string Theme { get; set; } = "system";
+
+    [ConfigComment("主窗口记忆宽度 (物理像素), 0 = 未记忆, 默认按 1300×820 物理像素启动, 不随 DPI/缩放放大, 跨屏物理大小不变")]
+    public double WindowPixelWidth { get; set; }
+
+    [ConfigComment("主窗口记忆高度 (物理像素), 0 = 未记忆, 默认按 1300×820 物理像素启动, 不随 DPI/缩放放大, 跨屏物理大小不变")]
+    public double WindowPixelHeight { get; set; }
+
+    [ConfigComment("旧版主窗口宽度 (DIP), 仅用于老配置一次性迁移, 不再写入")]
+    public double WindowWidth { get; set; }
+
+    [ConfigComment("旧版主窗口高度 (DIP), 仅用于老配置一次性迁移, 不再写入")]
+    public double WindowHeight { get; set; }
+}
+
+public class CpuSection
+{
+    [ConfigComment("当前选中档位: default / performance / saving / custom")]
+    public string CpuProfile { get; set; } = "default";
+
+    [ConfigComment("默认档位参数")]
+    public CpuProfileData Default { get; set; } = new()
+    {
+        CpuLongPower = 45, CpuShortPower = 65, CpuTempWall = 90, CpuMaxFrequency = 4400
+    };
+
+    [ConfigComment("高性能档位参数")]
+    public CpuProfileData Performance { get; set; } = new()
+    {
+        CpuLongPower = 65, CpuShortPower = 90, CpuTempWall = 95, CpuMaxFrequency = 4700
+    };
+
+    [ConfigComment("节能档位参数")]
+    public CpuProfileData Saving { get; set; } = new()
+    {
+        CpuLongPower = 30, CpuShortPower = 45, CpuTempWall = 85, CpuMaxFrequency = 3800
+    };
+
+    [ConfigComment("自定义档位参数")]
+    public CpuProfileData Custom { get; set; } = new();
+
+    [YamlIgnore]
+    public CpuProfileData Active => CpuProfile switch
+    {
+        "performance" => Performance,
+        "saving" => Saving,
+        "custom" => Custom,
+        _ => Default
+    };
+}
+
+public class CpuProfileData
+{
+    [ConfigComment("CPU长期功率限制 (W)")]
+    [ConfigRange(5, 120)]
+    public byte CpuLongPower { get; set; } = 45;
+
+    [ConfigComment("CPU短期功率限制 (W)")]
+    [ConfigRange(5, 150)]
+    public byte CpuShortPower { get; set; } = 55;
+
+    [ConfigComment("CPU温度墙 (℃)")]
+    [ConfigRange(60, 105)]
+    public byte CpuTempWall { get; set; } = 95;
+
+    [ConfigComment("CPU最大频率 (MHz)")]
+    [ConfigRange(2000, 6000)]
+    public uint CpuMaxFrequency { get; set; } = 4800;
+
+    [ConfigComment("CPU睿频开关")]
+    public bool CpuTurbo { get; set; } = true;
+}
+
+public class GpuSection
+{
+    [ConfigComment("GPU核心频率 (MHz)")]
+    public int GpuClock { get; set; }
+
+    [ConfigComment("GPU显存频率 (MHz)")]
+    public int MemoryClock { get; set; } = 100;
+
+    [ConfigComment("GPU功率限制 (W)")]
+    public int PowerLimit { get; set; } = 140;
+
+    [ConfigComment("GPU核心频率偏移 (MHz, 负值为降压)")]
+    public int CoreClockOffsetMhz { get; set; }
+
+    [ConfigComment("GPU显存频率偏移 (MHz)")]
+    public int MemoryClockOffsetMhz { get; set; }
+}
+
+public class FanSection
+{
+    [ConfigComment("合并CPU/GPU风扇曲线")]
+    public bool FanCurveMerge { get; set; }
+
+    [ConfigComment("手动风扇转速 (RPM)")]
+    public int ManualFanSpeed { get; set; } = 1500;
+
+    public List<FanPoint> CpuFanCurve { get; set; } = new()
+    {
+        new() { temp = 60, speed = 1500 }, new() { temp = 65, speed = 2104 },
+        new() { temp = 70, speed = 2778 }, new() { temp = 75, speed = 3158 },
+        new() { temp = 80, speed = 3365 }, new() { temp = 86, speed = 3607 },
+        new() { temp = 91, speed = 3849 }, new() { temp = 94, speed = 4828 },
+        new() { temp = 97, speed = 5415 }, new() { temp = 100, speed = 5800 },
+    };
+
+    public List<FanPoint> GpuFanCurve { get; set; } = new()
+    {
+        new() { temp = 60, speed = 3000 }, new() { temp = 65, speed = 4000 },
+        new() { temp = 70, speed = 4800 }, new() { temp = 75, speed = 5000 },
+        new() { temp = 80, speed = 5400 }, new() { temp = 87, speed = 5800 },
+    };
+}
+
+public class FanPoint
+{
+    [ConfigComment("温度 (℃)")]
+    public int temp { get; set; }
+
+    [ConfigComment("转速 (RPM)")]
+    public int speed { get; set; }
+}
+
+public class SmuSection
+{
+    [ConfigComment("STAPM限制 (W)")]
+    public int StapmLimit { get; set; }
+
+    [ConfigComment("STAPM时间 (s)")]
+    public int StapmTime { get; set; }
+
+    [ConfigComment("快速功耗限制 (W)")]
+    public int FastLimit { get; set; }
+
+    [ConfigComment("慢速功耗限制 (W)")]
+    public int SlowLimit { get; set; }
+
+    [ConfigComment("慢速功耗时间 (s)")]
+    public int SlowTime { get; set; }
+
+    [ConfigComment("PPT限制 (RSMU, W)")]
+    public int PptLimitRsmu { get; set; }
+
+    [ConfigComment("VRM电流 MP1 (A)")]
+    public int VrmCurrentMp1 { get; set; }
+
+    [ConfigComment("VRM电流 RSMU (A)")]
+    public int VrmCurrentRsmu { get; set; }
+
+    [ConfigComment("TDC限制 MP1 (A)")]
+    public int TdcLimitMp1 { get; set; }
+
+    [ConfigComment("TDC限制 RSMU (A)")]
+    public int TdcLimitRsmu { get; set; }
+
+    [ConfigComment("EDC限制 MP1 (A)")]
+    public int EdcLimitMp1 { get; set; }
+
+    [ConfigComment("EDC限制 RSMU (A)")]
+    public int EdcLimitRsmu { get; set; }
+
+    [ConfigComment("温度限制 MP1 (℃)")]
+    public int TempLimitMp1 { get; set; }
+
+    [ConfigComment("温度限制 RSMU (℃)")]
+    public int TempLimitRsmu { get; set; }
+
+    [ConfigComment("PBO Scalar")]
+    public int PboScalar { get; set; }
+
+    [ConfigComment("超频频率 (MHz)")]
+    public int OcClk { get; set; }
+
+    [ConfigComment("超频电压 (mV)")]
+    public int OcVolt { get; set; }
+
+    [ConfigComment("Curve Optimizer All (负值为降压)")]
+    public int CurveOptimizerAll { get; set; }
+
+    [ConfigComment("Curve Optimizer 分核偏移 (负值为降压, 索引=核心号)")]
+    public List<int> CurveOptimizerPerCore { get; set; } = new();
+}
+
+public class OsdSection
+{
+    [ConfigComment("启用 OSD 屏幕显示 (音量/锁定键由键盘事件触发)")]
+    public bool Enabled { get; set; } = true;
+
+    [ConfigComment("显示项目: 音量指示")]
+    public bool ShowVolume { get; set; } = true;
+
+    [ConfigComment("显示项目: 大写/数字/滚动锁定")]
+    public bool ShowLockKeys { get; set; } = true;
+
+    [ConfigComment("显示项目: 键盘背光档位 (软件内调整时触发)")]
+    public bool ShowKeyboardBacklight { get; set; } = true;
+
+    [ConfigComment("显示项目: 性能模式切换 (软件内切换时触发)")]
+    public bool ShowPerformanceMode { get; set; } = true;
+
+    [ConfigComment("模式切换 OSD 附带 CPU/GPU 温度与风扇转速")]
+    public bool ShowPerfTelemetry { get; set; } = true;
+
+    [ConfigComment("显示项目: 功能键(Fn)锁定 (轮询EC检测)")]
+    public bool ShowFnLock { get; set; } = true;
+
+    [ConfigComment("显示项目: 触摸板锁定 (轮询EC检测)")]
+    public bool ShowTouchpad { get; set; } = true;
+
+    [ConfigComment("显示项目: 媒体播放提示 (系统有程序开始播放音乐或切歌时显示曲名与歌手)")]
+    public bool ShowMedia { get; set; } = true;
+
+    [ConfigComment("屏蔽 Windows 原生音量弹窗 (接管音量键: 由本程序调整音量并显示自绘 OSD, 需「启用 OSD」开启)")]
+    public bool SuppressNativeVolumeOsd { get; set; } = false;
+
+    [ConfigComment("EC 状态轮询间隔 (ms, 事件通道不可用时的兜底)")]
+    [ConfigRange(500, 5000)]
+    public int PollIntervalMs { get; set; } = 1000;
+
+    [ConfigComment("出入场动画时长 (ms, 入场展开与出场收圆各占此时长)")]
+    [ConfigRange(200, 3000)]
+    public int AnimationMs { get; set; } = 480;
+
+    [ConfigComment("OSD 显示时长 (ms, 完全展开后的驻留时间)")]
+    [ConfigRange(500, 5000)]
+    public int DurationMs { get; set; } = 2000;
+
+    [ConfigComment("显示位置: TopCenter / BottomCenter / Custom")]
+    public string Position { get; set; } = "TopCenter";
+
+    [ConfigComment("自定义位置水平百分比 (胶囊在主屏工作区可移动行程的 0~100%, Position=Custom 时生效)")]
+    [ConfigRange(0, 100)]
+    public int CustomX { get; set; } = 50;
+
+    [ConfigComment("自定义位置垂直百分比 (胶囊在主屏工作区可移动行程的 0~100%, Position=Custom 时生效)")]
+    [ConfigRange(0, 100)]
+    public int CustomY { get; set; } = 8;
+
+    [ConfigComment("面板不透明度 (%)")]
+    [ConfigRange(30, 100)]
+    public int Opacity { get; set; } = 90;
+
+    [ConfigComment("界面缩放 (%)")]
+    [ConfigRange(100, 200)]
+    public int Scale { get; set; } = 150;
+}

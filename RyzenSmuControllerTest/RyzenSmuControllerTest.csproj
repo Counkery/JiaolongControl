@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net8.0-windows</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+        <RootNamespace>RyzenSmuControllerTest</RootNamespace>
+        <SatelliteResourceLanguages>zh-CN</SatelliteResourceLanguages>
+        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
+        <PackageReference Include="log4net" Version="3.4.0" />
+        <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="10.0.11" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- 独立 SMU 控制工具：直接编译所需源文件，不引用整个主项目 -->
+        <Compile Include="..\JiaoLongControl\Server\Core\Controllers\RyzenSmuController.cs" Link="Core\RyzenSmuController.cs" />
+        <Compile Include="..\JiaoLongControl\Server\Core\Controllers\SmuFamilyResolver.cs" Link="Core\SmuFamilyResolver.cs" />
+        <Compile Include="..\JiaoLongControl\Server\Core\Drivers\PawnIO.cs" Link="Core\PawnIO.cs" />
+        <Compile Include="..\JiaoLongControl\Server\Core\Native\Kernel32.cs" Link="Core\Kernel32.cs" />
+        <Compile Include="..\JiaoLongControl\Server\Core\Utils\CommandResult.cs" Link="Core\CommandResult.cs" />
+    </ItemGroup>
+    <ItemGroup>
+        <None Include="..\JiaoLongControl\Drivers\PawnIO\RyzenSMU.bin;..\JiaoLongControl\Drivers\PawnIO\AMDFamily17.bin" Link="Drivers\PawnIO\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+</Project>

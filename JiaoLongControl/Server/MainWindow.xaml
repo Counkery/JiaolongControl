@@ -1,0 +1,23 @@
+<Window x:Class="JiaoLongControl.Server.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="JiaolongControlConsole" 
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        ResizeMode="CanResize"
+        UseLayoutRounding="True"
+        Width="1300" Height="820"
+>
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0" 
+                      ResizeBorderThickness="6" 
+                      GlassFrameThickness="-1" 
+                      CornerRadius="0"/>
+    </WindowChrome.WindowChrome>
+
+    <Grid>
+        <!-- 2px 边框: 这圈是 WPF 自己的区域 (不被 WebView2 子窗口覆盖), WebView2 会吞掉边缘鼠标消息, 没有这圈边框时 左右下三边与两个下角无法拖拽缩放 -->
+        <Grid x:Name="WebViewHost" Margin="2"/>
+    </Grid>
+</Window>

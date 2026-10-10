@@ -1,0 +1,123 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <ApplicationManifest>app.manifest</ApplicationManifest>
+        <UseWPF>true</UseWPF>
+        <ApplicationIcon>Server\Resources\Icons\app.ico</ApplicationIcon>
+        <Configurations>Debug;Release</Configurations>
+        <Platforms>x64</Platforms>
+        <SatelliteResourceLanguages>zh-CN</SatelliteResourceLanguages>
+        <AppVersion>10.19.32</AppVersion>
+        <Version>$(AppVersion)</Version>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="2.0.1" />
+        <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
+        <PackageReference Include="log4net" Version="3.5.0" />
+        <PackageReference Include="Markdig" Version="1.4.0" />
+        <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.12" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.12" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.11" />
+        <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
+        <PackageReference Include="NvAPIWrapper.Net" Version="0.8.1.101" />
+        <PackageReference Include="System.Management" Version="10.0.12" />
+        <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.12" />
+        <PackageReference Include="TaskScheduler" Version="2.12.2" />
+        <PackageReference Include="YamlDotNet" Version="18.1.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Page Update="src\Host\MainWindow.xaml">
+            <Generator>MSBuild:Compile</Generator>
+            <XamlRuntime>Wpf</XamlRuntime>
+            <SubType>Designer</SubType>
+        </Page>
+        <Page Update="Server\MainWindow.xaml">
+            <Generator>MSBuild:Compile</Generator>
+            <XamlRuntime>Wpf</XamlRuntime>
+            <SubType>Designer</SubType>
+        </Page>
+    </ItemGroup>
+    <ItemGroup>
+        <Content Include="Resources\WebRoot\**\*">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+    <ItemGroup>
+        <!-- OSD 图标: 锁定状态/触摸板/大小写 (源文件在客户端图标库, 链接进程序集,
+             pack URI = pack://application:,,,/Assets/OSD/<文件名>) -->
+        <Resource Include="Client\src\assets\icon\TouchPad.png" Link="Assets\OSD\TouchPad.png" />
+        <Resource Include="Client\src\assets\icon\Lock.png" Link="Assets\OSD\Lock.png" />
+        <Resource Include="Client\src\assets\icon\Unlock.png" Link="Assets\OSD\Unlock.png" />
+        <Resource Include="Client\src\assets\icon\AllCaps.png" Link="Assets\OSD\AllCaps.png" />
+        <Resource Include="Client\src\assets\icon\AllLowercase.png" Link="Assets\OSD\AllLowercase.png" />
+    </ItemGroup>
+    <ItemGroup>
+        <EmbeddedResource Include="Server\Resources\Icons\app.ico" />
+        <None Update="Drivers\PawnIO\PawnIO.LICENSE.txt">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="Drivers\PawnIO\RyzenSMU.bin">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="Drivers\PawnIO\AMDFamily17.bin">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="Drivers\PawnIO\Nvidia.bin">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="Drivers\Blding\JiaoLongDriver64.dll">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="Drivers\Blding\JiaoLongDriver64.sys">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+    <ItemGroup>
+        <ApplicationDefinition Include="Server\App.xaml">
+            <Generator>MSBuild:Compile</Generator>
+            <XamlRuntime>Wpf</XamlRuntime>
+            <SubType>Designer</SubType>
+        </ApplicationDefinition>
+    </ItemGroup>
+    <ItemGroup>
+        <None Include="App.config" />
+    </ItemGroup>
+    <ItemGroup>
+        <Content Include="Server/Resources/WebRoot/**">
+            <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+            <_Parameter1>AppVersion</_Parameter1>
+            <_Parameter2>$(AppVersion)</_Parameter2>
+        </AssemblyAttribute>
+    </ItemGroup>
+
+    <!-- publish 时自动构建 Client 前端 (Vue/Vite), 产物拷入发布目录 WebRoot
+         (运行时按 exe 同级 WebRoot 加载) -->
+    <PropertyGroup>
+        <ClientDir>$(MSBuildProjectDirectory)\Client</ClientDir>
+        <ClientDistDir>$(MSBuildProjectDirectory)\obj\ClientDist</ClientDistDir>
+    </PropertyGroup>
+    <Target Name="BuildClientApp" AfterTargets="ComputeFilesToPublish">
+        <Message Importance="high" Text="Building client app in $(ClientDir) ..." />
+        <Exec Condition="!Exists('$(ClientDir)\node_modules')" Command="npm ci" WorkingDirectory="$(ClientDir)" />
+        <Exec Command="npm run type-check" WorkingDirectory="$(ClientDir)" />
+        <Exec Command="npx vite build --outDir &quot;$(ClientDistDir)&quot; --emptyOutDir" WorkingDirectory="$(ClientDir)" />
+        <ItemGroup>
+            <_ClientDistFiles Include="$(ClientDistDir)\**\*" />
+            <ResolvedFileToPublish Include="@(_ClientDistFiles->'%(FullPath)')" Exclude="@(ResolvedFileToPublish)">
+                <RelativePath>WebRoot\%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
+                <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+            </ResolvedFileToPublish>
+        </ItemGroup>
+    </Target>
+</Project>
