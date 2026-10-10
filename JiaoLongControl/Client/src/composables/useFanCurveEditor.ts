@@ -67,9 +67,40 @@ export function useFanCurveEditor() {
     selectedIndex.value = null
   }
 
+  const bootAutoStart = computed({
+    get: () => configStore.config?.App.BootAdvancedFanControlSystem ?? false,
+    set: (v: boolean) => {
+      if (configStore.config) {
+        configStore.config.App.BootAdvancedFanControlSystem = v
+        configStore.debouncedSave()
+      }
+    },
+  })
+
+  const rampUpRpmPerSec = computed({
+    get: () => configStore.config?.Fan.RampUpRpmPerSec ?? 600,
+    set: (v: number) => {
+      if (configStore.config) {
+        configStore.config.Fan.RampUpRpmPerSec = v
+        configStore.debouncedSave()
+      }
+    },
+  })
+
+  const rampDownRpmPerSec = computed({
+    get: () => configStore.config?.Fan.RampDownRpmPerSec ?? 250,
+    set: (v: number) => {
+      if (configStore.config) {
+        configStore.config.Fan.RampDownRpmPerSec = v
+        configStore.debouncedSave()
+      }
+    },
+  })
+
   const checkServiceStatus = async () => {
     try {
-      isServiceRunning.value = (await AutoFanControl.IsRunning()).Success
+      const res = await AutoFanControl.IsRunning()
+      isServiceRunning.value = !!(res.Success && res.Data)
     } catch (e) {
       console.error('Failed to check fan control status:', e)
     }
@@ -81,17 +112,25 @@ export function useFanCurveEditor() {
     serviceLoading.value = true
     try {
       if (newValue) {
-        await AutoFanControl.Start()
-        Message.success('自动风扇控制已启用')
+        const res = await AutoFanControl.Start()
+        if (!res.Success) {
+          Message.error(res.Message || '启动失败')
+          return false
+        }
+        Message.success('温度曲线模式已启用')
       } else {
-        await AutoFanControl.Stop()
-        Message.info('自动风扇控制已停止')
+        const res = await AutoFanControl.Stop()
+        if (!res.Success) {
+          Message.error(res.Message || '停止失败')
+          return false
+        }
+        Message.info('温度曲线模式已停止')
       }
-      isServiceRunning.value = (await AutoFanControl.IsRunning()).Success
+      await checkServiceStatus()
       return true
     } catch {
       Message.error('操作失败，请检查日志')
-      isServiceRunning.value = (await AutoFanControl.IsRunning()).Success
+      await checkServiceStatus()
       return false
     } finally {
       serviceLoading.value = false
@@ -351,6 +390,9 @@ export function useFanCurveEditor() {
     editForm,
     isServiceRunning,
     serviceLoading,
+    bootAutoStart,
+    rampUpRpmPerSec,
+    rampDownRpmPerSec,
     canDelete,
     isValidRender,
     onTabChange,

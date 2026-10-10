@@ -61,6 +61,9 @@ namespace JiaoLongControl.Server.Core.Controllers
         // EC 状态基线: null = 尚无基线 (首次有效读取只记录不触发); 读取失败 (255) 跳过不更新。
         // 轮询与 HID_EVENT20 事件链路复用同一组基线做去重
         private SystemPerMode? _lastPerf;
+
+        /// <summary>QuietDaily 等自管下发期间 &gt;0：Detect/热键不得再跑 PerformanceModeBindings。</summary>
+        private int _modeBindingsSuppressDepth;
         private bool? _lastScroll;
         private ResultState? _lastTouchpad;
         private bool _loggedNoSession;
@@ -420,10 +423,46 @@ namespace JiaoLongControl.Server.Core.Controllers
             }, cfg);
         }
 
-        /// <summary>性能模式切换时触发 (来自 PerformanceModeController; 同步轮询基线避免重复弹 OSD)。</summary>
-        public void OnPerformanceModeChanged(SystemPerMode mode)
+        /// <summary>
+        /// 预先抬高 Detect 基线，避免紧接着的 EC SetValue 被轮询当成“外部切模式”再打一遍绑定。
+        /// </summary>
+        [ComVisible(false)]
+        public void NoteExpectedPerfMode(SystemPerMode mode)
+        {
+            if (mode != SystemPerMode.Unknow)
+                _lastPerf = mode;
+        }
+
+        [ComVisible(false)]
+        public void BeginSuppressModeBindings() => Interlocked.Increment(ref _modeBindingsSuppressDepth);
+
+        [ComVisible(false)]
+        public void EndSuppressModeBindings()
+        {
+            // 不低于 0，避免异常路径把 suppress 打成负数导致绑定永久 fail-open
+            int v;
+            do
+            {
+                v = Volatile.Read(ref _modeBindingsSuppressDepth);
+                if (v <= 0) return;
+            } while (Interlocked.CompareExchange(ref _modeBindingsSuppressDepth, v - 1, v) != v);
+        }
+
+        /// <summary>性能模式切换时触发 (UI Set / EC 热键); 默认同步风扇与 CPU 档位绑定。</summary>
+        public void OnPerformanceModeChanged(SystemPerMode mode) =>
+            OnPerformanceModeChanged(mode, applyHardwareBindings: true);
+
+        /// <summary>
+        /// <paramref name="applyHardwareBindings"/> 为 false 时仅刷新 OSD（预览 / QuietDaily 自管下发），不改风扇与 CPU。
+        /// </summary>
+        [ComVisible(false)]
+        public void OnPerformanceModeChanged(SystemPerMode mode, bool applyHardwareBindings)
         {
             if (mode != SystemPerMode.Unknow) _lastPerf = mode;
+            if (applyHardwareBindings && mode != SystemPerMode.Unknow &&
+                Volatile.Read(ref _modeBindingsSuppressDepth) <= 0)
+                PerformanceModeBindings.OnModeChanged(mode);
+
             var cfg = Bridge.Instance.Config.Osd;
             if (!cfg.Enabled || !cfg.ShowPerformanceMode) return;
             var (glyph, accent) = ModeVisual(mode);
@@ -562,6 +601,10 @@ namespace JiaoLongControl.Server.Core.Controllers
 
         private void DetectSystemPerMode()
         {
+            // QuietDaily 等自管下发窗口：不改基线、不打绑定，避免污染 _lastPerf / 误清瞬时
+            if (Volatile.Read(ref _modeBindingsSuppressDepth) > 0)
+                return;
+
             var mode = MethodServices.GetValue<SystemPerMode>(MethodName.SystemPerMode);
             if (mode == SystemPerMode.Unknow) return;                 // 读取失败, 跳过
             if (!_lastPerf.HasValue) { _lastPerf = mode; return; }    // 首次有效读取仅作基线
@@ -833,11 +876,11 @@ namespace JiaoLongControl.Server.Core.Controllers
                             ShowKeyboardOsd((byte)Math.Clamp(value, 0, 3), Bridge.Instance.Config.Osd);
                             break;
                         case "perf":
-                            // WMI 读取放到后台线程, 避免阻塞 UI
+                            // 预览只弹 OSD，不触发风扇/CPU 硬件绑定
                             Task.Run(() =>
                             {
                                 var mode = MethodServices.GetValue<SystemPerMode>(MethodName.SystemPerMode);
-                                OnPerformanceModeChanged(mode);
+                                OnPerformanceModeChanged(mode, applyHardwareBindings: false);
                             });
                             break;
                         case "media":

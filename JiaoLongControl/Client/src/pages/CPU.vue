@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import CpuDie from '@/components/common/CpuDie.vue'
 
-import {computed, ref} from 'vue'
+import {computed, onMounted, onUnmounted, ref} from 'vue'
 import {Message} from '@arco-design/web-vue'
-import {CPU, type CpuInfo, Power, RyzenSmu} from '@/utils/bridge.ts'
+import {CPU, type CpuInfo, PerformanceMode, Power, RyzenSmu} from '@/utils/bridge.ts'
+import type {SoftScheduleDataType} from '@/types/config'
 import {useConfigStore} from '@/stores/config'
 import {useSystemInfoStore} from '@/stores/systemInfo'
 import type {CpuProfileDataType} from '@/types/config'
 import {CPU_PROFILE_DEFAULTS} from '@/constants'
 
 const loading = ref(false)
+const customMode = ref(false)
+const customModeLoading = ref(false)
 const configStore = useConfigStore()
 const systemInfoStore = useSystemInfoStore()
 
@@ -21,6 +24,79 @@ const cpuInfo = ref<CpuInfo | null>(null)
 const infoResult = await CPU.GetCpuInfo()
 if (infoResult.Success) {
   cpuInfo.value = infoResult.Data
+}
+
+const acHint = ref('')
+const customModeUnknown = ref(false)
+const quietDailyActive = ref(false)
+const quietDailySoft = ref<SoftScheduleDataType | null>(null)
+
+async function refreshQuietDailyState() {
+  try {
+    const qd = await PerformanceMode.GetQuietDailyActive()
+    if (qd.Success && qd.Data) {
+      quietDailyActive.value = !!qd.Data.Active
+      quietDailySoft.value = qd.Data.SoftSchedule ?? null
+    } else {
+      quietDailyActive.value = false
+      quietDailySoft.value = null
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function onQuietDailyChanged(e: Event) {
+  const detail = (e as CustomEvent<{ active?: boolean }>).detail
+  if (detail && detail.active === false) {
+    quietDailyActive.value = false
+    quietDailySoft.value = null
+    return
+  }
+  void refreshQuietDailyState()
+}
+
+try {
+  const cm = await CPU.GetCustomMode()
+  if (cm.Success) {
+    customMode.value = !!cm.Data
+    customModeUnknown.value = false
+  } else {
+    customModeUnknown.value = true
+    Message.warning(cm.Message || '无法读取自定义功耗模式状态')
+  }
+  const ac = await CPU.GetAcPowerState()
+  if (ac.Success && ac.Data) acHint.value = ac.Data.Hint || ''
+  await refreshQuietDailyState()
+} catch {
+  /* ignore */
+}
+
+onMounted(() => {
+  window.addEventListener('jiaolong-quiet-daily-changed', onQuietDailyChanged)
+})
+onUnmounted(() => {
+  window.removeEventListener('jiaolong-quiet-daily-changed', onQuietDailyChanged)
+})
+
+async function toggleCustomMode(next: string | number | boolean) {
+  const on = !!next
+  customModeLoading.value = true
+  try {
+    const res = await CPU.SetCustomMode(on)
+    if (!res.Success) {
+      Message.error(res.Message || '自定义功耗模式设置失败')
+      return false
+    }
+    customMode.value = on
+    Message.success(on ? '已开启 EC 自定义功耗模式' : '已关闭 EC 自定义功耗模式')
+    return true
+  } catch {
+    Message.error('自定义功耗模式设置失败')
+    return false
+  } finally {
+    customModeLoading.value = false
+  }
 }
 
 // 使用 computed 来简化对配置项的访问，并确保响应性
@@ -36,10 +112,10 @@ const selectedProfile = ref('default')
 
 // 配置文件卡片: 从配置恢复上次选中的档位（不覆盖已保存的值）
 const profiles = [
-  { key: 'default', title: '默认配置', desc: '平衡性能与功耗' },
-  { key: 'performance', title: '高性能模式', desc: '释放最大性能' },
-  { key: 'saving', title: '节能模式', desc: '降低功耗与温度' },
-  { key: 'custom', title: '自定义配置', desc: '自定义参数设置' },
+  { key: 'saving', title: '办公静音', desc: '轻负载低热 · 约 45W' },
+  { key: 'default', title: '游戏均衡', desc: '双烤甜点 · 约 78/108W' },
+  { key: 'performance', title: '生产力', desc: '高负载持续 · 约 90/115W' },
+  { key: 'custom', title: '自定义', desc: '完全手动参数' },
 ] as const
 
 // 从配置恢复上次选中的档位（不覆盖已保存的值）
@@ -77,6 +153,13 @@ async function handleApplyAll() {
   loading.value = true
   try {
     const failures: string[] = []
+    // 0. 下发功耗前打开 EC 自定义模式（后端也会 Ensure，此处同步开关状态）
+    const openRes = await CPU.SetCustomMode(true)
+    if (openRes.Success) {
+      customMode.value = true
+    } else {
+      failures.push(openRes.Message || '打开自定义功耗模式失败')
+    }
     // 1. 设置长时功耗限制 (PL1)
     const longPowerRes = await CPU.SetCpuLongPower(activeProfile.value.CpuLongPower)
     if (!longPowerRes.Success) {
@@ -97,12 +180,43 @@ async function handleApplyAll() {
     if (!maxFreqRes.Success) {
       failures.push(maxFreqRes.Message || '最大频率设置失败')
     }
-    // 5. 设置睿频开关
-    const turboRes = activeProfile.value.CpuTurbo
-      ? await Power.EnableTurbo()
-      : await Power.DisableTurbo()
-    if (!turboRes.Success) {
-      failures.push(turboRes.Message || (activeProfile.value.CpuTurbo ? '睿频开启失败' : '睿频关闭失败'))
+    // 5. 软调度（EPP / 停放 / Boost，含睿频；关睿频时 Boost 强制 0）
+    //    应用档位即退出安静日常：写入当前档 SoftSchedule，不再保留 QuietDaily 瞬时调度
+    const soft =
+      activeProfile.value.SoftSchedule ?? CPU_PROFILE_DEFAULTS[profileKey(selectedProfile.value)].SoftSchedule
+    if (soft) {
+      const softRes = await Power.ApplySoftSchedule(
+        soft.AcEpp,
+        soft.DcEpp,
+        soft.AcCpMinCores,
+        soft.DcCpMinCores,
+        soft.AcBoostMode,
+        soft.DcBoostMode,
+        activeProfile.value.CpuTurbo,
+      )
+      if (!softRes.Success) {
+        failures.push(softRes.Message || '软调度应用失败')
+      }
+    } else {
+      const turboRes = activeProfile.value.CpuTurbo
+        ? await Power.EnableTurbo()
+        : await Power.DisableTurbo()
+      if (!turboRes.Success) {
+        failures.push(turboRes.Message || (activeProfile.value.CpuTurbo ? '睿频开启失败' : '睿频关闭失败'))
+      }
+    }
+
+    // 5b. 同步保活目标并清除 QuietDaily 瞬时覆盖（须在 saveConfig 之前）
+    const keepRes = await CPU.SyncPowerKeepAlive(
+      activeProfile.value.CpuLongPower,
+      activeProfile.value.CpuShortPower,
+      activeProfile.value.CpuTempWall,
+    )
+    if (!keepRes.Success) {
+      failures.push(keepRes.Message || '保活目标同步失败')
+    } else {
+      quietDailyActive.value = false
+      quietDailySoft.value = null
     }
     // 6. 核心电压偏移: 分核模式下逐核心写入已保存的分核数值 (列表为空则跳过), 否则保持全核偏移
     //    分核失败只汇总计数, 不逐核 toast, 避免十几核时消息刷屏
@@ -154,7 +268,18 @@ async function handleReset() {
   const key = profileKey(selectedProfile.value)
   const defaults = CPU_PROFILE_DEFAULTS[key]
   if (!CPUData.value || !defaults) return
-  Object.assign(CPUData.value[key], defaults)
+  Object.assign(CPUData.value[key], {
+    ...defaults,
+    SoftSchedule: defaults.SoftSchedule ? { ...defaults.SoftSchedule } : undefined,
+  })
+  // 重置：结束安静日常并按 Active 档恢复硬件，再存盘
+  await CPU.SyncPowerKeepAliveAndRestore(
+    defaults.CpuLongPower,
+    defaults.CpuShortPower,
+    defaults.CpuTempWall,
+  )
+  quietDailyActive.value = false
+  quietDailySoft.value = null
   const saveRes = await configStore.saveConfig()
   const profileTitle = profiles.find((p) => p.key === selectedProfile.value)?.title ?? ''
   if (saveRes?.Success) {
@@ -162,6 +287,20 @@ async function handleReset() {
   } else {
     Message.error(saveRes?.Message || '重置值保存失败')
   }
+}
+
+const softScheduleView = computed(() => {
+  if (quietDailyActive.value && quietDailySoft.value) return quietDailySoft.value
+  return (
+    activeProfile.value.SoftSchedule ??
+    CPU_PROFILE_DEFAULTS[profileKey(selectedProfile.value)]?.SoftSchedule
+  )
+})
+
+const boostLabel = (mode: number) => {
+  if (mode <= 0) return '关'
+  if (mode === 1) return '开'
+  return '激进'
 }
 
 // 取消修改：强制从后端重新加载原始配置
@@ -179,7 +318,36 @@ async function handleCancel() {
         <!-- 头部标题 -->
         <div>
           <h1 class="text-2xl font-bold tracking-wide">CPU 设置</h1>
-          <p class="text-[13px] text-gray-500 mt-1">调整 CPU 的性能参数，发挥处理器最佳性能。</p>
+          <p class="text-[13px] text-gray-500 mt-1">
+            调整功耗墙与频率；应用档位时同步软调度（EPP / 停放 / Boost），插电与电池分设。
+          </p>
+          <p
+            v-if="quietDailyActive"
+            class="text-[11px] text-amber-400/90 mt-2 leading-relaxed"
+          >
+            安静日常瞬时生效中（墙 93℃ + QuietDaily 软调度）。在本页点「应用」或切换性能模式将退出并恢复当前档配置。
+          </p>
+        </div>
+
+        <!-- 0. EC 自定义功耗模式 -->
+        <div
+          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg flex items-center justify-between gap-4"
+        >
+          <div>
+            <h2 class="text-[13px] font-semibold text-gray-300">EC 自定义功耗模式</h2>
+            <p class="text-[11px] text-gray-500 mt-1">
+              对应第三方 CustomMode；写入 SPL/SPPT/温度墙前需开启。需圆口大功率 AC（约 &gt;200W），勿用 Type-C。
+            </p>
+            <p v-if="acHint" class="text-[11px] text-amber-500/90 mt-1">{{ acHint }}</p>
+            <p v-if="customModeUnknown" class="text-[11px] text-amber-500/90 mt-1">
+              未能读取开关状态，请确认 WMI/驱动后刷新页面。
+            </p>
+          </div>
+          <a-switch
+            v-model="customMode"
+            :loading="customModeLoading"
+            :before-change="toggleCustomMode"
+          />
         </div>
 
         <!-- 1. CPU 配置文件 -->
@@ -219,11 +387,11 @@ async function handleCancel() {
           <h2 class="text-[13px] font-semibold text-gray-300">核心设置</h2>
 
           <div class="space-y-6">
-            <!-- 短时功耗限制 (PL1) -->
+            <!-- 长期功耗 SPL (EC LongPower) -->
             <div class="space-y-2">
               <div class="flex justify-between items-center text-xs">
                 <span class="text-gray-300 flex items-center gap-1"
-                  >功耗限制 (PL1)
+                  >长期功耗 (SPL)
                   <span class="text-gray-500 cursor-pointer text-[10px] hover:text-gray-300"
                     >ⓘ</span
                   ></span
@@ -232,14 +400,14 @@ async function handleCancel() {
                   >{{ activeProfile.CpuLongPower }} W</span
                 >
               </div>
-              <a-slider v-model="activeProfile.CpuLongPower" :min="30" :max="255" class="w-full" />
+              <a-slider v-model="activeProfile.CpuLongPower" :min="5" :max="120" class="w-full" />
             </div>
 
-            <!-- 长时功耗限制 (PL2) -->
+            <!-- 短期功耗 SPPT (EC ShortPower) -->
             <div class="space-y-2">
               <div class="flex justify-between items-center text-xs">
                 <span class="text-gray-300 flex items-center gap-1"
-                  >长时功耗限制 (PL2)
+                  >短期功耗 (SPPT)
                   <span class="text-gray-500 cursor-pointer text-[10px] hover:text-gray-300"
                     >ⓘ</span
                   ></span
@@ -248,7 +416,7 @@ async function handleCancel() {
                   >{{ activeProfile.CpuShortPower }} W</span
                 >
               </div>
-              <a-slider v-model="activeProfile.CpuShortPower" :min="30" :max="255" class="w-full" />
+              <a-slider v-model="activeProfile.CpuShortPower" :min="5" :max="150" class="w-full" />
             </div>
 
             <!-- 核心电压偏移 (Curve Optimizer): 启用分核降压后替换为文本提示, 应用时逐核心写入 -->
@@ -311,14 +479,47 @@ async function handleCancel() {
               </div>
               <a-slider
                 v-model="activeProfile.CpuMaxFrequency"
-                :min="1000"
-                :max="5400"
+                :min="2000"
+                :max="6000"
                 :step="100"
                 class="w-full"
               />
             </div>
           </div>
         </div>
+
+        <!-- 3. 软调度（随档位应用，出厂值；重置可恢复） -->
+        <div
+          v-if="softScheduleView"
+          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg space-y-3"
+        >
+          <div>
+            <h2 class="text-[13px] font-semibold text-gray-300">
+              软调度
+              <span v-if="quietDailyActive" class="text-amber-400/90 font-normal ml-1">（安静日常）</span>
+            </h2>
+            <p class="text-[11px] text-gray-500 mt-1">
+              应用本档时写入当前电源方案：能效偏好 / 停放下限 / 睿频模式。游戏档偏集中保睿频，生产力档少停放便于满线程。
+            </p>
+          </div>
+          <div class="grid grid-cols-2 gap-3 text-[11px]">
+            <div class="rounded-lg bg-ink/[0.03] border border-ink/[0.05] px-3 py-2 space-y-1">
+              <div class="text-gray-500">插电 (AC)</div>
+              <div class="text-gray-300 font-mono">
+                EPP {{ softScheduleView.AcEpp }} · 停放≥{{ softScheduleView.AcCpMinCores }}% · Boost
+                {{ boostLabel(softScheduleView.AcBoostMode) }}
+              </div>
+            </div>
+            <div class="rounded-lg bg-ink/[0.03] border border-ink/[0.05] px-3 py-2 space-y-1">
+              <div class="text-gray-500">电池 (DC)</div>
+              <div class="text-gray-300 font-mono">
+                EPP {{ softScheduleView.DcEpp }} · 停放≥{{ softScheduleView.DcCpMinCores }}% · Boost
+                {{ boostLabel(softScheduleView.DcBoostMode) }}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- 4. 底部全局控制栏 -->
         <div class="flex justify-between items-center pt-2">
           <button

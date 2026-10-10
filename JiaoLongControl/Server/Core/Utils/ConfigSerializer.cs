@@ -29,6 +29,12 @@ public static class ConfigSerializer
     // 首次启动回到新默认, 之后的手动调整正常记忆。
     private static readonly Version PixelSizeSemanticsVersion = new("10.19.31");
 
+    // 自该版本起写入 7945HX 办公/游戏/生产力三档出厂预设 (Saving/Default/Performance)。
+    private static readonly Version CpuPresets7945HxVersion = new("10.19.34");
+
+    // 自该版本起为三档写入 SoftSchedule（EPP / CPMIN / Boost，AC·DC）。
+    private static readonly Version SoftScheduleVersion = new("10.19.38");
+
     public static string ConfigDir { get; set; } = Path.Combine(AppContext.BaseDirectory, "config");
     public static string ConfigPath => Path.Combine(ConfigDir, FileName);
     private static string TempPath => ConfigPath + TempExt;
@@ -122,6 +128,26 @@ public static class ConfigSerializer
             LowConfig.App.WindowPixelHeight = 0;
             LowConfig.App.WindowWidth = 0;
             LowConfig.App.WindowHeight = 0;
+        }
+
+        // 升级到 10.19.34+：刷新三档出厂预设；Custom 与当前选中档位名保留
+        if (!Version.TryParse(LowConfig.Version, out oldVersion) || oldVersion < CpuPresets7945HxVersion)
+        {
+            LowConfig.Cpu.Saving = CpuProfilePresets.Office();
+            LowConfig.Cpu.Default = CpuProfilePresets.Game();
+            LowConfig.Cpu.Performance = CpuProfilePresets.Productivity();
+            LowConfig.App.ApplyCpuProfileOnModeChange = true;
+            if (LowConfig.Smu.CurveOptimizerAll == 0)
+                LowConfig.Smu.CurveOptimizerAll = -12;
+        }
+
+        // 升级到 10.19.38+：仅刷新软调度，保留用户已调的 SPL/频率等
+        if (!Version.TryParse(LowConfig.Version, out oldVersion) || oldVersion < SoftScheduleVersion)
+        {
+            LowConfig.Cpu.Saving.SoftSchedule = SoftSchedulePresets.Office();
+            LowConfig.Cpu.Default.SoftSchedule = SoftSchedulePresets.Game();
+            LowConfig.Cpu.Performance.SoftSchedule = SoftSchedulePresets.Productivity();
+            LowConfig.Cpu.Custom.SoftSchedule ??= SoftSchedulePresets.Game();
         }
 
         // 默认无损迁移

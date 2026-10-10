@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using JiaoLongControl.Server.Core.Models;
 using JiaoLongControl.Server.Core.Utils;
@@ -24,11 +25,9 @@ public class AutoFanControl : IDisposable
 
     private const float AlphaUp = 0.35f;
     private const float AlphaDown = 0.05f;
-    private const double MaxRampUpRpmPerSec = 800.0;
-    private const double MaxRampDownRpmPerSec = 150.0;
-    private const double MaxRampUpBytePerSec = MaxRampUpRpmPerSec / RPM_UNIT_DIVISOR;
-    private const double MaxRampDownBytePerSec = MaxRampDownRpmPerSec / RPM_UNIT_DIVISOR;
     private const double SharedHeatPipeSyncRatio = 0.85;
+    private const double DefaultRampUpRpmPerSec = 600.0;
+    private const double DefaultRampDownRpmPerSec = 250.0;
     private readonly ILog Logger = LogManager.GetLogger(typeof(AutoFanControl));
 
     private readonly Dictionary<FanType, FanState> _states = new()
@@ -86,8 +85,11 @@ public class AutoFanControl : IDisposable
         finally
         {
             _isRunning = false;
+            // 对齐 sakura：停止曲线后写 0 + 关 FAAP，交回 EC 自动
+            try { Bridge.Instance.Fan.RestoreEcAutoFan(); }
+            catch (Exception ex) { Logger.Warn($"停止曲线后交回 EC 失败: {ex.Message}"); }
         }
-        return new CommandResult(_isRunning, "自动风扇控制已停止");
+        return new CommandResult(true, "自动风扇控制已停止");
     }
 
     private void ControlLoop(CancellationToken token)
@@ -101,12 +103,17 @@ public class AutoFanControl : IDisposable
             _states[FanType.GPU] = new FanState();
         }
 
+        var loopStamp = Stopwatch.GetTimestamp();
         try
         {
             while (!token.IsCancellationRequested)
             {
                 try
                 {
+                    double dtSec = Stopwatch.GetElapsedTime(loopStamp).TotalSeconds;
+                    loopStamp = Stopwatch.GetTimestamp();
+                    dtSec = Math.Clamp(dtSec, 0.05, 3.0);
+
                     float rawCpuTemp = Convert.ToSingle(Bridge.Instance.CPU.GetCPUThermometer().Data);
                     float smoothedCpuTemp = UpdateSmoothedTemp(FanType.CPU, rawCpuTemp);
 
@@ -119,15 +126,15 @@ public class AutoFanControl : IDisposable
                     if (Bridge.Instance.Config.Fan.FanCurveMerge)
                     {
                         int targetByte = Math.Max(targetCpuByte, targetGpuByte);
-                        ProcessAndApplyFanSpeed(FanType.CPU, targetByte);
-                        ProcessAndApplyFanSpeed(FanType.GPU, targetByte);
+                        ProcessAndApplyFanSpeed(FanType.CPU, targetByte, dtSec);
+                        ProcessAndApplyFanSpeed(FanType.GPU, targetByte, dtSec);
                     }
                     else
                     {
                         int syncedCpuTarget = Math.Max(targetCpuByte, (int)(targetGpuByte * SharedHeatPipeSyncRatio));
                         int syncedGpuTarget = Math.Max(targetGpuByte, (int)(targetCpuByte * SharedHeatPipeSyncRatio));
-                        ProcessAndApplyFanSpeed(FanType.CPU, syncedCpuTarget);
-                        ProcessAndApplyFanSpeed(FanType.GPU, syncedGpuTarget);
+                        ProcessAndApplyFanSpeed(FanType.CPU, syncedCpuTarget, dtSec);
+                        ProcessAndApplyFanSpeed(FanType.GPU, syncedGpuTarget, dtSec);
                     }
 
                     Task.Delay(IntervalMs, token).Wait(token);
@@ -167,7 +174,15 @@ public class AutoFanControl : IDisposable
         return state.SmoothedTemp;
     }
 
-    private void ProcessAndApplyFanSpeed(FanType type, int targetSpeedByte)
+    private static (double UpByte, double DownByte) RampBytePerSec()
+    {
+        var fan = Bridge.Instance.Config.Fan;
+        double up = Math.Clamp(fan.RampUpRpmPerSec > 0 ? fan.RampUpRpmPerSec : DefaultRampUpRpmPerSec, 50, 2000);
+        double down = Math.Clamp(fan.RampDownRpmPerSec > 0 ? fan.RampDownRpmPerSec : DefaultRampDownRpmPerSec, 50, 2000);
+        return (up / RPM_UNIT_DIVISOR, down / RPM_UNIT_DIVISOR);
+    }
+
+    private void ProcessAndApplyFanSpeed(FanType type, int targetSpeedByte, double dtSec)
     {
         FanState state;
         lock (_states) { state = _states[type]; }
@@ -177,15 +192,12 @@ public class AutoFanControl : IDisposable
         }
         else
         {
+            var (upByte, downByte) = RampBytePerSec();
             double diff = targetSpeedByte - state.CurrentSpeedByte;
             if (diff > 0)
-            {
-                state.CurrentSpeedByte += Math.Min(diff, MaxRampUpBytePerSec);
-            }
+                state.CurrentSpeedByte += Math.Min(diff, upByte * dtSec);
             else if (diff < 0)
-            {
-                state.CurrentSpeedByte -= Math.Min(-diff, MaxRampDownBytePerSec);
-            }
+                state.CurrentSpeedByte -= Math.Min(-diff, downByte * dtSec);
         }
 
         int finalSpeedByte = (int)Math.Clamp(Math.Round(state.CurrentSpeedByte), MIN_FAN_BYTE, MAX_FAN_BYTE);

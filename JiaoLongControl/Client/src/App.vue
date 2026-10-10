@@ -26,6 +26,12 @@ function onWebViewMessage(e: MessageEvent) {
     const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data
     if (data && data.type === 'config-changed') {
       configStore.refresh()
+    } else if (data && data.type === 'quiet-daily-changed') {
+      window.dispatchEvent(
+        new CustomEvent('jiaolong-quiet-daily-changed', {
+          detail: { active: !!data.active },
+        }),
+      )
     } else if (data && data.type === 'lock-states-changed') {
       locksStore.apply(data)
     }

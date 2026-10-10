@@ -57,6 +57,18 @@
 | JiaolongControl `Drivers/PawnIO` | 默认优先（`App.PreferPawnIO`） |
 | JiaolongControl `Drivers/Blding` | 本机 EC/风扇 |
 
+## CPU 三档预设 (7945HX / 10.19.34+)
+
+详见 [CPU_PRESETS_7945HX.md](./CPU_PRESETS_7945HX.md)。
+
+| EC `SystemPerMode` | CpuProfile | 含义 |
+|---|---|---|
+| QuietMode | `saving` | 办公静音 45/60W |
+| BalanceMode | `default` | 游戏均衡 78/108W |
+| PerformanceMode | `performance` | 生产力 90/115W |
+
+`App.ApplyCpuProfileOnModeChange`：UI 与 EC 热键切模式时同步下发功耗/温度墙（`PerformanceModeBindings`）。
+
 ## 使用约定
 
 - 不要与闭源控制中心同时控制同一硬件。

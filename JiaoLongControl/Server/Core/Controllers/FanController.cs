@@ -3,6 +3,7 @@ using JiaoLongControl.Server.Core.Drivers;
 using JiaoLongControl.Server.Core.Models;
 using JiaoLongControl.Server.Core.Services;
 using JiaoLongControl.Server.Core.Utils;
+using JiaoLongControl.Server.Interop;
 
 namespace JiaoLongControl.Server.Core.Controllers;
 
@@ -21,44 +22,146 @@ public class FanController : Blding64
         return new CommandResult(true, "获取成功", fanSpeedInfo);
     }
 
+    /// <summary>
+    /// 设置当前模式的 WMI 转速上限（官方语义：MaxFanSpeedSwitch + MaxFanSpeed）。
+    /// rpm&lt;=0 表示关闭上限、交回 EC 自动控制。
+    /// </summary>
+    public CommandResult SetFanCeilingRpm(int rpm)
+    {
+        var mode = MethodServices.GetValue<SystemPerMode>(MethodName.SystemPerMode);
+        if (mode == SystemPerMode.Unknow)
+            mode = SystemPerMode.BalanceMode;
+
+        if (rpm <= 0)
+        {
+            var off = SetMaxFanSpeedSwitch(false);
+            return new CommandResult(off.Success, off.Success ? "已交回 EC 自动风扇" : "关闭上限失败", new
+            {
+                Enabled = false,
+                Rpm = 0,
+                Mode = mode.ToString()
+            });
+        }
+
+        var (min, max) = FanCeilingRanges.ForMode(mode);
+        int clamped = FanCeilingRanges.ClampRpm(mode, rpm);
+        byte unit = FanCeilingRanges.ToUnit(clamped);
+
+        // 显式设 WMI 上限（含安静日常）时停软件曲线，避免与 Blding 强制设速打架。
+        // 切性能模式绑定：若 AutoFan 正在跑则 PerformanceModeBindings 会跳过本方法，两套语义一致。
+        try
+        {
+            var running = Bridge.Instance.AutoFan.IsRunning();
+            if (running.Success && running.Data is true)
+                Bridge.Instance.AutoFan.Stop();
+        }
+        catch { /* Bridge 未就绪时忽略 */ }
+
+        if (!SetMaxFanSpeedSwitch(true).Success)
+            return new CommandResult(false, "打开转速上限开关失败");
+
+        var ok = MethodServices.SetValue(MethodName.MaxFanSpeed, unit);
+        string msg = ok
+            ? (clamped != rpm
+                ? $"已设转速上限 {clamped} RPM（已按 {mode} 模式钳制到 {min}-{max}）"
+                : $"已设转速上限 {clamped} RPM")
+            : "设置转速上限失败";
+
+        return new CommandResult(ok, msg, new
+        {
+            Enabled = true,
+            Rpm = clamped,
+            RequestedRpm = rpm,
+            MinRpm = min,
+            MaxRpm = max,
+            Mode = mode.ToString()
+        });
+    }
+
+    public CommandResult GetFanCeilingRpm()
+    {
+        var mode = MethodServices.GetValue<SystemPerMode>(MethodName.SystemPerMode);
+        if (mode == SystemPerMode.Unknow)
+            mode = SystemPerMode.BalanceMode;
+        var (min, max) = FanCeilingRanges.ForMode(mode);
+        var on = MethodServices.GetValue<byte>(MethodName.MaxFanSpeedSwitch) == 1;
+        var unit = MethodServices.GetValue<byte>(MethodName.MaxFanSpeed);
+        int rpm = on && unit != byte.MaxValue ? unit * 100 : 0;
+        return new CommandResult(true, "获取成功", new
+        {
+            Enabled = on,
+            Rpm = rpm,
+            MinRpm = min,
+            MaxRpm = max,
+            Mode = mode.ToString()
+        });
+    }
+
+    public CommandResult GetFanCeilingRange()
+    {
+        var mode = MethodServices.GetValue<SystemPerMode>(MethodName.SystemPerMode);
+        if (mode == SystemPerMode.Unknow)
+            mode = SystemPerMode.BalanceMode;
+        var (min, max) = FanCeilingRanges.ForMode(mode);
+        return new CommandResult(true, "获取成功", new { MinRpm = min, MaxRpm = max, Mode = mode.ToString() });
+    }
+
+    /// <summary>
+    /// 进阶：经 Blding 强制写入风扇设定值（非官方 WMI 上限语义）。
+    /// AutoFan 软件曲线使用此路径；日常安静请优先用 SetFanCeilingRpm。
+    /// </summary>
     public CommandResult SetFanSpeed(byte fanSpeed)
     {
-        if ((bool)GetMaxFanSpeedSwitch().Data)
-        {
-            // 此处为兼容性设置，为避免官方控制台冲突设计
+        var maxOn = GetMaxFanSpeedSwitch();
+        if (maxOn.Success && maxOn.Data is true)
             SetMaxFanSpeedSwitch(false);
-        }
 
         if (IsInitialized)
         {
             GpuFanSetSpeed(fanSpeed);
             CpuFanSetSpeed(fanSpeed);
-            return new CommandResult(true, "设置成功");
+            return new CommandResult(true, "Blding 强制设速成功（进阶路径）");
         }
 
         return new CommandResult(false, "设置失败");
     }
 
-    public CommandResult RemoveFanSpeed()
+    public CommandResult RemoveFanSpeed() => RestoreEcAutoFan();
+
+    /// <summary>
+    /// 交回 EC 自动风扇：Blding 目标转速写 0（若驱动可用）+ 关闭 WMI 上限开关 (FAAP)。
+    /// 进程退出/崩溃/停止软件曲线时调用；Blding 未就绪时仍尝试关 FAAP。
+    /// </summary>
+    public CommandResult RestoreEcAutoFan()
     {
-        if (IsInitialized)
+        bool bldingOk = false;
+        try
         {
-            base.RemoveFanSpeed();
-            return new CommandResult(true, "设置成功");
+            if (IsInitialized)
+            {
+                base.RemoveFanSpeed();
+                bldingOk = true;
+            }
+        }
+        catch
+        {
+            /* 驱动异常仍继续关 FAAP */
         }
 
-        return new CommandResult(false, "设置失败");
+        var faap = SetMaxFanSpeedSwitch(false);
+        bool ok = faap.Success || bldingOk;
+        return new CommandResult(ok, ok ? "已交回 EC 自动风扇" : "交回 EC 自动风扇失败");
     }
 
-    [Obsolete("不推荐使用SetMaxFanSpeedSwitch")]
-    public bool SetMaxFanSpeedSwitch(bool maxFanSpeedSwitch)
+    public CommandResult SetMaxFanSpeedSwitch(bool maxFanSpeedSwitch)
     {
-        return MethodServices.SetValue(MethodName.MaxFanSpeedSwitch, (byte)(maxFanSpeedSwitch ? 1 : 0));
+        var res = MethodServices.SetValue(MethodName.MaxFanSpeedSwitch, (byte)(maxFanSpeedSwitch ? 1 : 0));
+        return new CommandResult(res, res ? "设置成功" : "设置失败", maxFanSpeedSwitch);
     }
 
     public CommandResult GetMaxFanSpeedSwitch()
     {
-        var res = MethodServices.GetValue<byte>(MethodName.MaxFanSpeedSwitch) == 1;
-        return new CommandResult(res, "获取成功",res);
+        var on = MethodServices.GetValue<byte>(MethodName.MaxFanSpeedSwitch) == 1;
+        return new CommandResult(true, "获取成功", on);
     }
 }

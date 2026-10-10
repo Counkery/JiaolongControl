@@ -5,6 +5,7 @@ import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { LineChart } from 'echarts/charts'
 import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
+import { Message } from '@arco-design/web-vue'
 import { PerformanceMode, SystemInfo, SystemPerMode } from '@/utils/bridge'
 import { useSystemInfoStore } from '@/stores/systemInfo'
 import { chartTheme } from '@/theme/theme'
@@ -25,13 +26,13 @@ const systemInfoStore = useSystemInfoStore()
 const { cpuTemp, gpuTemp, fanSpeed, gpuStats } = storeToRefs(systemInfoStore)
 
 const performanceModes = ref([
-  { id: SystemPerMode.QuietMode, name: '高性能', icon: iconPerformance, active: false },
-  { id: SystemPerMode.PerformanceMode, name: '平衡', icon: iconQuiet, active: false },
-  { id: SystemPerMode.BalanceMode, name: '静音', icon: iconBalanced, active: false },
+  { id: SystemPerMode.QuietMode, name: '静音', icon: iconQuiet, active: false },
+  { id: SystemPerMode.BalanceMode, name: '均衡', icon: iconBalanced, active: false },
+  { id: SystemPerMode.PerformanceMode, name: '高性能', icon: iconPerformance, active: false },
 ])
 
 const activeMode = computed(
-  () => performanceModes.value.find((m) => m.active) || { name: '高性能', icon: iconPerformance },
+  () => performanceModes.value.find((m) => m.active) || { name: '均衡', icon: iconBalanced },
 )
 
 async function fetchPerformanceMode() {
@@ -50,10 +51,27 @@ async function fetchPerformanceMode() {
 function setMode(id: SystemPerMode) {
   performanceModes.value.forEach((m) => {
     m.active = m.id === id
-    if (id !== SystemPerMode.CustomMode) {
-      PerformanceMode.Set(id)
-    }
   })
+  PerformanceMode.Set(id)
+}
+
+const quietDailyLoading = ref(false)
+async function applyQuietDaily() {
+  quietDailyLoading.value = true
+  try {
+    const res = await PerformanceMode.ApplyQuietDaily()
+    if (res.Success) {
+      Message.success(res.Message || '已应用安静日常')
+      await fetchPerformanceMode()
+      // 同模式再点「均衡」不会退出；切模式或 CPU 页应用才会结束瞬时会话
+    } else {
+      Message.error(res.Message || '应用失败')
+    }
+  } catch {
+    Message.error('应用安静日常失败')
+  } finally {
+    quietDailyLoading.value = false
+  }
 }
 
 const cpuUsage = computed(() => systemInfoStore.cpuStats?.Usage ?? 0)
@@ -235,7 +253,12 @@ const lineChartOption = computed(() => ({
 
     <!-- Row 2: 模式 & 监控 -->
     <div class="grid grid-cols-12 gap-3 h-[250px]">
-      <PerformanceModeComp :modes="performanceModes" @change-mode="setMode" />
+      <PerformanceModeComp
+        :modes="performanceModes"
+        :quiet-daily-loading="quietDailyLoading"
+        @change-mode="setMode"
+        @quiet-daily="applyQuietDaily"
+      />
       <CoreMonitoringComp
         :cpu-usage="cpuUsage"
         :gpu-usage="gpuUsage"

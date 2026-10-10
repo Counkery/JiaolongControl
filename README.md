@@ -68,12 +68,14 @@ dotnet publish JiaoLongControl/JiaoLongControl.csproj -c Release
 
 ## 本 Fork 改造说明（remake）
 
-基于上游 JiaolongControl，对照闭源「第三方蛟龙游戏控制中心」做稳定性与体验改造（版本 `10.19.33`）：
+基于上游 JiaolongControl，对照闭源「第三方蛟龙游戏控制中心」做稳定性与体验改造（版本 `10.19.37`）：
 
 - WMI 热键去重、CPU 功耗保活（与监控轮询分离）
+- 7945HX 三档预设（办公/游戏/生产力）与模式-CPU/风扇联动
 - 模式-风扇绑定、RGB 即时关闭、Legacy `AppSettings.json` 导入
 - 日志默认 Info + 轮转；GPU 偏移安全范围护栏
-- 文档：`Doc/PROTOCOL_MAP.md`、`Doc/BASELINE_CHECKLIST.md`、`Doc/PHASE3_SMU_GPU.md`
+- 前端按路由懒加载拆包；文档含功能缺口对照 `Doc/FEATURE_GAP_THIRDPARTY.md`
+- 文档：`Doc/PROTOCOL_MAP.md`、`Doc/CPU_PRESETS_7945HX.md`、`Doc/BASELINE_CHECKLIST.md`、`Doc/PHASE3_SMU_GPU.md`
 
 请勿与闭源控制中心同时运行。优先使用 **PawnIO**，避免 WinRing0。
 

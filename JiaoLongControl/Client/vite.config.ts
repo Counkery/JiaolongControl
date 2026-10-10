@@ -28,5 +28,23 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     outDir: '../../bin/publish/WebRoot',
+    rollupOptions: {
+      output: {
+        // 按依赖族与页面路由拆包，降低首屏主包体积
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (id.includes('echarts') || id.includes('vue-echarts') || id.includes('zrender')) {
+            return 'vendor-echarts'
+          }
+          if (id.includes('@arco-design')) {
+            return 'vendor-arco'
+          }
+          if (id.includes('pinia') || id.includes('vue-router') || id.includes('/vue/')) {
+            return 'vendor-vue'
+          }
+        },
+      },
+    },
+    chunkSizeWarningLimit: 600,
   },
 }))

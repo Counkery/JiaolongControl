@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import useStore, { HomeCardType } from '@/stores'
-import { computed } from 'vue'
+import { watch } from 'vue'
+import { useRoute } from 'vue-router'
+import useStore from '@/stores'
 
 const store = useStore()
-const currentComponent = computed(() => {
-  for (let i of HomeCardType) {
-    if (i.num === store.$state.SwitchPages) {
-      return i.page
-    }
-  }
-  return HomeCardType[0]!.page
-})
+const route = useRoute()
+
+watch(
+  () => route.name,
+  (name) => store.syncFromRoute(name),
+  { immediate: true },
+)
 
 function enter(el: Element, done: () => void) {
   el.classList.add('swap')
@@ -29,7 +29,7 @@ function leave(_el: Element, done: () => void) {
     <transition mode="out-in" @enter="enter" @leave="leave">
       <Suspense>
         <template #default>
-          <component :is="currentComponent" :key="store.$state.SwitchPages" />
+          <router-view :key="String(route.name ?? route.path)" />
         </template>
         <template #fallback>
           <div class="absolute inset-0 flex items-center justify-center bg-page">

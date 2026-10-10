@@ -2,11 +2,51 @@
   <div class="h-full overflow-y-auto text-ink p-6 no-scrollbar">
     <div class="max-w-[1300px] mx-auto space-y-6">
       <div>
-        <h1 class="text-2xl font-bold tracking-wide">风扇曲线编辑器</h1>
+        <h1 class="text-2xl font-bold tracking-wide">温度曲线模式（进阶）</h1>
         <p class="text-[13px] text-gray-500 mt-1">
-          可视化拖动调整不同核心温度下的风扇转速，支持 CPU/GPU 独立配置。
+          软件轮询 + Blding 强制设速，与官方「转速上限」不是同一路径。日常安静请优先用主页「安静日常」或风扇页 WMI 上限；勿与上限同时开启。
         </p>
       </div>
+
+      <div
+        class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+      >
+        <div>
+          <h2 class="text-[13px] font-semibold text-gray-300">开机自动启动温度曲线</h2>
+          <p class="text-[11px] text-gray-500 mt-1">
+            对应第三方 TemperatureCurveAutoStart；写入「开机高级风扇」配置。
+          </p>
+        </div>
+        <a-switch v-model="bootAutoStart" />
+      </div>
+
+      <div
+        class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg space-y-4"
+      >
+        <div>
+          <h2 class="text-[13px] font-semibold text-gray-300">斜率限速</h2>
+          <p class="text-[11px] text-gray-500 mt-1">
+            每秒最多升高/降低的转速，减轻突跳和「温度降了风扇还在狂吹」。停止曲线或退出程序时会交回 EC 自动。
+          </p>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="space-y-2">
+            <div class="flex justify-between text-xs">
+              <span class="text-gray-400">升速上限</span>
+              <span class="text-purple-400 font-mono">{{ rampUpRpmPerSec }} RPM/s</span>
+            </div>
+            <a-slider v-model="rampUpRpmPerSec" :min="50" :max="2000" :step="50" class="w-full" />
+          </div>
+          <div class="space-y-2">
+            <div class="flex justify-between text-xs">
+              <span class="text-gray-400">降速上限</span>
+              <span class="text-purple-400 font-mono">{{ rampDownRpmPerSec }} RPM/s</span>
+            </div>
+            <a-slider v-model="rampDownRpmPerSec" :min="50" :max="2000" :step="50" class="w-full" />
+          </div>
+        </div>
+      </div>
+
       <a-card class="fan-curve-card" :bordered="false" @click="closeMenu">
         <div class="header-info">
           <!-- 左侧：CPU/GPU 切换及移除设置 -->
@@ -35,7 +75,7 @@
                 <template #icon>
                   <div :class="['status-dot', { active: isServiceRunning }]"></div>
                 </template>
-                {{ isServiceRunning ? '运行中' : '已停止' }}
+                {{ isServiceRunning ? '曲线运行中' : '曲线已停止' }}
               </a-tag>
 
               <a-switch
@@ -277,6 +317,9 @@ const {
   editForm,
   isServiceRunning,
   serviceLoading,
+  bootAutoStart,
+  rampUpRpmPerSec,
+  rampDownRpmPerSec,
   canDelete,
   isValidRender,
   onTabChange,

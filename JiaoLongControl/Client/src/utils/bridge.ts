@@ -13,11 +13,11 @@ export type CommandResult<T = void> = {
   Message: string
 } & (T extends void ? Record<never, never> : { Data: T })
 
+/** 与 Server SysEnums.SystemPerMode 数值一致: Balance=0, Performance=1, Quiet=2 */
 export enum SystemPerMode {
-  PerformanceMode = 0,
-  QuietMode = 1,
-  BalanceMode = 2,
-  CustomMode = 3,
+  BalanceMode = 0,
+  PerformanceMode = 1,
+  QuietMode = 2,
 }
 
 export enum RGBKeyboardMode {
@@ -48,6 +48,59 @@ export interface SystemOverview {
   GpuName: string
   OsVersion: string
   MemoryInfo: string
+}
+
+export interface FanCeilingInfo {
+  Enabled: boolean
+  Rpm: number
+  RequestedRpm?: number
+  MinRpm?: number
+  MaxRpm?: number
+  Mode?: string
+}
+
+export interface AcPowerState {
+  OnAc: boolean
+  AcRaw: number
+  CanUseCustomMode: boolean
+  Hint: string
+}
+
+export interface DeviceHardwareInfo {
+  Cpu: {
+    Name: string
+    Manufacturer: string
+    Cores: number
+    Threads: number
+    BaseFreqMhz: number
+  }
+  PrimaryGpu: { Name: string; DriverVersion: string; MemoryMb: number } | null
+  Gpus: Array<{ Name: string; DriverVersion: string; MemoryMb: number }>
+  MemoryModules: Array<{
+    CapacityGb: number
+    SpeedMhz: number
+    Manufacturer: string
+    PartNumber: string
+  }>
+  TotalMemoryGb: number
+  MemoryUsedGb: number
+  MemoryFreeGb: number
+  MemoryUsedPercent: number
+  Disks: Array<{
+    Model: string
+    SizeGb: number
+    MediaType: string
+    InterfaceType: string
+  }>
+  Volumes: Array<{
+    Caption: string
+    FileSystem: string
+    SizeGb: number
+    FreeGb: number
+    UsedPercent: number
+  }>
+  OsVersion: string
+  OsBuild: string
 }
 
 export interface GpuStats {
@@ -147,6 +200,13 @@ export interface BridgeApi {
     SetCpuLongPower(lp: number): HostBridgePromise<void>
     SetCustomMode(open: boolean): HostBridgePromise<void>
     GetCustomMode(): HostBridgePromise<boolean>
+    SyncPowerKeepAlive(longPower: number, shortPower: number, tempWall: number): HostBridgePromise<void>
+    SyncPowerKeepAliveAndRestore(
+      longPower: number,
+      shortPower: number,
+      tempWall: number,
+    ): HostBridgePromise<void>
+    GetAcPowerState(): HostBridgePromise<AcPowerState>
     GetCPUThermometer(): HostBridgePromise<number>
     GetCpuUsage(): HostBridgePromise<number>
     GetCpuInfo(): HostBridgePromise<CpuInfo>
@@ -159,8 +219,12 @@ export interface BridgeApi {
     GetFanSpeed(): HostBridgePromise<FanSpeedInfo>
     SetFanSpeed(fanSpeed: number): HostBridgePromise<void>
     RemoveFanSpeed(): HostBridgePromise<void>
+    RestoreEcAutoFan(): HostBridgePromise<void>
     GetMaxFanSpeedSwitch(): HostBridgePromise<boolean>
     SetMaxFanSpeedSwitch(maxFanSpeedSwitch: boolean): HostBridgePromise<void>
+    SetFanCeilingRpm(rpm: number): HostBridgePromise<FanCeilingInfo>
+    GetFanCeilingRpm(): HostBridgePromise<FanCeilingInfo>
+    GetFanCeilingRange(): HostBridgePromise<{ MinRpm: number; MaxRpm: number; Mode: string }>
   }
   GPU: {
     Get(): HostBridgePromise<GPUMode>
@@ -181,11 +245,23 @@ export interface BridgeApi {
   PerformanceMode: {
     Get(): HostBridgePromise<SystemPerMode>
     Set(mode: SystemPerMode): HostBridgePromise<void>
+    ApplyQuietDaily(): HostBridgePromise<unknown>
+    GetQuietDailyActive(): HostBridgePromise<{
+      Active: boolean
+      SoftSchedule?: import('@/types/config').SoftScheduleDataType
+    }>
   }
   ConfigCtrl: {
     GetConfig(): HostBridgePromise<import('@/types/config').JiaoLongConfigType>
     SetConfig(configJson: string): HostBridgePromise<void>
     ImportLegacyAppSettings(path: string): HostBridgePromise<unknown>
+    ResolveBatteryThresholdToolDir(): HostBridgePromise<string>
+    LaunchBatteryThreshold(
+      enable: boolean,
+      low: number,
+      high: number,
+      allowInitialDischarge: boolean,
+    ): HostBridgePromise<unknown>
   }
   AutoStart: {
     Enable(): HostBridgePromise<void>
@@ -235,12 +311,29 @@ export interface BridgeApi {
     SetCPUMaxState(percent: number): HostBridgePromise<void>
     DisableTurbo(): HostBridgePromise<void>
     EnableTurbo(): HostBridgePromise<void>
+    ApplySoftSchedule(
+      acEpp: number,
+      dcEpp: number,
+      acCpMinCores: number,
+      dcCpMinCores: number,
+      acBoostMode: number,
+      dcBoostMode: number,
+      turboEnabled: boolean,
+    ): HostBridgePromise<void>
     GetCPUMaxFrequency(): HostBridgePromise<{ ac: number; dc: number }>
     GetCPUMaxState(): HostBridgePromise<number>
-    GetTurboEnabled(): HostBridgePromise<{ ac: boolean; dc: boolean }>
+    GetTurboEnabled(): HostBridgePromise<{
+      ac: boolean
+      dc: boolean
+      Ac?: number
+      Dc?: number
+      AcEnabled?: boolean
+      DcEnabled?: boolean
+    }>
   }
   SystemInfo: {
     GetSystemOverview(): HostBridgePromise<SystemOverview>
+    GetDeviceHardwareInfo(): HostBridgePromise<DeviceHardwareInfo>
     OpenUrl(url: string): HostBridgePromise<void>
   }
   RyzenSmu: {
@@ -359,6 +452,13 @@ export const CPU = {
   SetCpuLongPower: (lp: number) => call(raw.CPU.SetCpuLongPower(toByte(lp))),
   SetCustomMode: (open: boolean) => call(raw.CPU.SetCustomMode(open)),
   GetCustomMode: () => call(raw.CPU.GetCustomMode()),
+  SyncPowerKeepAlive: (longPower: number, shortPower: number, tempWall: number) =>
+    call(raw.CPU.SyncPowerKeepAlive(toByte(longPower), toByte(shortPower), toByte(tempWall))),
+  SyncPowerKeepAliveAndRestore: (longPower: number, shortPower: number, tempWall: number) =>
+    call(
+      raw.CPU.SyncPowerKeepAliveAndRestore(toByte(longPower), toByte(shortPower), toByte(tempWall)),
+    ),
+  GetAcPowerState: () => call(raw.CPU.GetAcPowerState()),
   SetCPUTempWall: (tw: number) => call(raw.CPU.SetCPUTempWall(toByte(tw))),
   GetCPUThermometer: () =>
     cached(CACHE_TTL_MS, 'CPU.GetCPUThermometer', () => call(raw.CPU.GetCPUThermometer())),
@@ -374,8 +474,16 @@ export const CPU = {
 
 export const Fan = {
   GetFanSpeed: () => cached(CACHE_TTL_MS, 'Fan.GetFanSpeed', () => call(raw.Fan.GetFanSpeed())),
+  /** 进阶：Blding 强制设速（软件曲线用） */
   SetFanSpeed: (fanSpeed: number) => call(raw.Fan.SetFanSpeed(toByte(fanSpeed / 100))),
   RemoveFanSpeed: () => call(raw.Fan.RemoveFanSpeed()),
+  RestoreEcAutoFan: () => call(raw.Fan.RestoreEcAutoFan()),
+  GetMaxFanSpeedSwitch: () => call(raw.Fan.GetMaxFanSpeedSwitch()),
+  SetMaxFanSpeedSwitch: (on: boolean) => call(raw.Fan.SetMaxFanSpeedSwitch(on)),
+  /** 官方语义：当前模式转速上限（WMI 0x14/0x15） */
+  SetFanCeilingRpm: (rpm: number) => call(raw.Fan.SetFanCeilingRpm(rpm)),
+  GetFanCeilingRpm: () => call(raw.Fan.GetFanCeilingRpm()),
+  GetFanCeilingRange: () => call(raw.Fan.GetFanCeilingRange()),
 }
 
 export const GPU = {
@@ -401,6 +509,8 @@ export const Keyboard = {
 export const PerformanceMode = {
   Get: () => call(raw.PerformanceMode.Get()),
   Set: (mode: SystemPerMode) => call(raw.PerformanceMode.Set(mode)),
+  ApplyQuietDaily: () => call(raw.PerformanceMode.ApplyQuietDaily()),
+  GetQuietDailyActive: () => call(raw.PerformanceMode.GetQuietDailyActive()),
 }
 
 export const Boot = {
@@ -503,6 +613,7 @@ export const SystemInfo = {
     cached(STATIC_TTL_MS, 'SystemInfo.GetSystemOverview', () =>
       call(raw.SystemInfo.GetSystemOverview()),
     ),
+  GetDeviceHardwareInfo: () => call(raw.SystemInfo.GetDeviceHardwareInfo()),
   OpenUrl: (url: string) => call(raw.SystemInfo.OpenUrl(url)),
 }
 
@@ -537,6 +648,26 @@ export const Power = {
   ResetCPUMaxFrequency: () => call(raw.Power.ResetCPUMaxFrequency()),
   DisableTurbo: () => call(raw.Power.DisableTurbo()),
   EnableTurbo: () => call(raw.Power.EnableTurbo()),
+  ApplySoftSchedule: (
+    acEpp: number,
+    dcEpp: number,
+    acCpMinCores: number,
+    dcCpMinCores: number,
+    acBoostMode: number,
+    dcBoostMode: number,
+    turboEnabled: boolean,
+  ) =>
+    call(
+      raw.Power.ApplySoftSchedule(
+        acEpp,
+        dcEpp,
+        acCpMinCores,
+        dcCpMinCores,
+        acBoostMode,
+        dcBoostMode,
+        turboEnabled,
+      ),
+    ),
   GetCPUMaxFrequency: () => call(raw.Power.GetCPUMaxFrequency()),
   GetTurboEnabled: () => call(raw.Power.GetTurboEnabled()),
 }
@@ -559,6 +690,9 @@ export const Config = {
     call(raw.ConfigCtrl.SetConfig(JSON.stringify(config))),
   /** 从第三方控制中心 AppSettings.json 导入；path 为空则尝试默认路径 */
   ImportLegacyAppSettings: (path = '') => call(raw.ConfigCtrl.ImportLegacyAppSettings(path)),
+  ResolveBatteryThresholdToolDir: () => call(raw.ConfigCtrl.ResolveBatteryThresholdToolDir()),
+  LaunchBatteryThreshold: (enable: boolean, low = 60, high = 80, allowInitialDischarge = false) =>
+    call(raw.ConfigCtrl.LaunchBatteryThreshold(enable, low, high, allowInitialDischarge)),
 }
 const postMessage = (message: unknown) => {
   if (!window.chrome?.webview) {

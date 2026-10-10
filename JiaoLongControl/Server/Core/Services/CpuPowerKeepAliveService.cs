@@ -24,26 +24,102 @@ public sealed class CpuPowerKeepAliveService : IDisposable
     private byte _desiredLong;
     private byte _desiredShort;
     private byte _desiredTempWall;
-    private bool _hasTarget;
+
+    /// <summary>目标世代：SetTransient/UpdateTarget 递增，避免 Loop 拷贝后被旧值 Reapply 踩踏。</summary>
+    private int _targetEpoch;
+
+    /// <summary>安静日常等瞬时目标：为 true 时 Loop 不再 SyncFromConfig 覆盖。</summary>
+    private bool _transientOverride;
+
+    /// <summary>瞬时软调度（与 QuietDaily 一并生效；退出瞬时会话后清空）。</summary>
+    private SoftScheduleData? _transientSoft;
 
     public bool IsRunning => _running;
 
-    /// <summary>更新期望功耗目标（来自当前 CPU 档位）。</summary>
-    public void UpdateTarget(byte longPower, byte shortPower, byte tempWall)
+    public bool HasTransientOverride
+    {
+        get { lock (_lock) return _transientOverride; }
+    }
+
+    /// <summary>
+    /// 更新期望功耗目标（来自当前 CPU 档位 / UI 应用）。
+    /// 默认清除瞬时覆盖，避免 QuietDaily 保活打回旧墙。
+    /// </summary>
+    public void UpdateTarget(byte longPower, byte shortPower, byte tempWall, bool clearTransient = true)
     {
         lock (_lock)
         {
             _desiredLong = longPower;
             _desiredShort = shortPower;
             _desiredTempWall = tempWall;
-            _hasTarget = true;
+            _targetEpoch++;
+            if (clearTransient)
+            {
+                _transientOverride = false;
+                _transientSoft = null;
+            }
         }
     }
 
-    public void SyncFromConfig()
+    /// <summary>设置瞬时功耗/软调度目标（不写配置）；softSchedule 必填，避免 Active 与 Soft 分裂。</summary>
+    public void SetTransientOverride(
+        byte longPower, byte shortPower, byte tempWall, SoftScheduleData softSchedule)
     {
+        ArgumentNullException.ThrowIfNull(softSchedule);
+        lock (_lock)
+        {
+            _desiredLong = longPower;
+            _desiredShort = shortPower;
+            _desiredTempWall = tempWall;
+            _transientSoft = softSchedule;
+            _transientOverride = true;
+            _targetEpoch++;
+        }
+    }
+
+    public void ClearTransientOverride()
+    {
+        lock (_lock)
+        {
+            _transientOverride = false;
+            _transientSoft = null;
+        }
+    }
+
+    /// <summary>QuietDaily 期间返回瞬时软调度；否则 null（调用方用档位 SoftSchedule）。</summary>
+    public SoftScheduleData? GetTransientSoftSchedule()
+    {
+        lock (_lock)
+        {
+            return _transientOverride ? _transientSoft : null;
+        }
+    }
+
+    public SoftScheduleData GetEffectiveSoftSchedule(SoftScheduleData? fallback)
+    {
+        lock (_lock)
+        {
+            if (_transientOverride && _transientSoft != null)
+                return _transientSoft;
+        }
+        return fallback ?? SoftSchedulePresets.Game();
+    }
+
+    public void SyncFromConfig(bool force = false)
+    {
+        lock (_lock)
+        {
+            if (_transientOverride && !force)
+                return;
+            if (force)
+            {
+                _transientOverride = false;
+                _transientSoft = null;
+            }
+        }
+
         var cpu = Bridge.Instance.Config.Cpu.Active;
-        UpdateTarget(cpu.CpuLongPower, cpu.CpuShortPower, cpu.CpuTempWall);
+        UpdateTarget(cpu.CpuLongPower, cpu.CpuShortPower, cpu.CpuTempWall, clearTransient: true);
     }
 
     public CommandResult Start()
@@ -102,17 +178,8 @@ public sealed class CpuPowerKeepAliveService : IDisposable
                     continue;
                 }
 
-                byte longP, shortP, wall;
-                lock (_lock)
-                {
-                    if (!_hasTarget)
-                        SyncFromConfig();
-                    longP = _desiredLong;
-                    shortP = _desiredShort;
-                    wall = _desiredTempWall;
-                }
-
-                Reapply(longP, shortP, wall);
+                SyncFromConfig();
+                ReapplyLatest();
                 token.WaitHandle.WaitOne(Math.Clamp(IntervalMs, 5_000, 120_000));
             }
             catch (OperationCanceledException)
@@ -131,18 +198,59 @@ public sealed class CpuPowerKeepAliveService : IDisposable
     /// EC 侧多数机型无法可靠读回当前 SPL/SPPT，故采用“条件重应用”：
     /// 每次周期重新写入期望值。写入失败记 Warn，成功仅 Debug，避免刷屏。
     /// </summary>
+    private static long _lastFailWarnTick;
+
+    /// <summary>
+    /// 读取当前目标并下发；若下发过程中世代变化（如 QuietDaily 刚 SetTransient），立刻用新目标再写一次。
+    /// </summary>
+    private void ReapplyLatest()
+    {
+        for (int attempt = 0; attempt < 2; attempt++)
+        {
+            byte longP, shortP, wall;
+            int epoch;
+            lock (_lock)
+            {
+                longP = _desiredLong;
+                shortP = _desiredShort;
+                wall = _desiredTempWall;
+                epoch = _targetEpoch;
+            }
+
+            Reapply(longP, shortP, wall);
+
+            lock (_lock)
+            {
+                if (_targetEpoch == epoch)
+                    return;
+            }
+        }
+    }
+
     private static void Reapply(byte longP, byte shortP, byte wall)
     {
         var cpu = Bridge.Instance.CPU;
+        if (!cpu.IsAcReadyForCustomMode())
+        {
+            Logger.Debug("非圆口 AC，跳过 CPU 功耗保活重应用");
+            return;
+        }
+
         var r1 = cpu.SetCpuLongPower(longP);
         var r2 = cpu.SetCpuShortPower(shortP);
         var r3 = cpu.SetCPUTempWall(wall);
 
         if (!r1.Success || !r2.Success || !r3.Success)
         {
-            Logger.Warn(
-                $"CPU 功耗重应用部分失败: long={r1.Success}, short={r2.Success}, wall={r3.Success} " +
-                $"(target L={longP} S={shortP} T={wall})");
+            // 最多约 2 分钟一条 Warn，避免 CustomMode 打不开时刷屏
+            long now = Environment.TickCount64;
+            if (now - Interlocked.Read(ref _lastFailWarnTick) > 120_000)
+            {
+                Interlocked.Exchange(ref _lastFailWarnTick, now);
+                Logger.Warn(
+                    $"CPU 功耗重应用部分失败: long={r1.Success}, short={r2.Success}, wall={r3.Success} " +
+                    $"(target L={longP} S={shortP} T={wall})");
+            }
         }
         else
         {

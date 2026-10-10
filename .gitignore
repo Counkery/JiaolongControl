@@ -45,3 +45,6 @@ JiaoLongControl.sln.DotSettings.user
 # Python 本地缓存
 __pycache__/
 *.pyc
+
+# 本地发布产物
+publish/

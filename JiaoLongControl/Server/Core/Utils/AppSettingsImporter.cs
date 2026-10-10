@@ -27,6 +27,7 @@ public static class AppSettingsImporter
 
     /// <summary>
     /// 导入并写回 Bridge 配置。fanPercent 按约 0–100 映射到 0–5800 RPM。
+    /// 同时刷新 A/B/C 三档出厂预设；第三方原始功耗写入 Custom（并钳制到 OEM 合理区间）。
     /// </summary>
     public static CommandResult ImportFromFile(string path)
     {
@@ -55,15 +56,29 @@ public static class AppSettingsImporter
                 60, 105);
 
             // SPL≈长期, SPPT≈短期；若只有 CPUPowerConsumptionValue 则两边都用它
-            byte longP = (byte)Math.Clamp(
-                legacy.SplData > 0 ? legacy.SplData : legacy.CPUPowerConsumptionValue, 5, 120);
-            byte shortP = (byte)Math.Clamp(
-                legacy.SpptData > 0 ? legacy.SpptData : Math.Max(longP, legacy.CPUPowerConsumptionValue), 5, 150);
+            int rawLong = legacy.SplData > 0 ? legacy.SplData : legacy.CPUPowerConsumptionValue;
+            int rawShort = legacy.SpptData > 0 ? legacy.SpptData : Math.Max(rawLong, legacy.CPUPowerConsumptionValue);
 
+            // 同机型长期功耗经验上限约 95W；第三方默认 101 偏高，导入时钳制并记日志
+            if (rawLong > 95)
+                Logger.Warn($"导入 SPL={rawLong}W 高于 7945HX 同机型建议上限 95W，已钳制到 90W 写入 Custom");
+            if (rawShort > 120)
+                Logger.Warn($"导入 SPPT={rawShort}W 高于建议上限 120W，已钳制到 115W 写入 Custom");
+
+            byte longP = (byte)Math.Clamp(rawLong > 95 ? 90 : rawLong, 5, 120);
+            byte shortP = (byte)Math.Clamp(rawShort > 120 ? 115 : Math.Max(rawShort, longP), 5, 150);
+
+            // 刷新三档出厂预设（办公/游戏/生产力）
+            cfg.Cpu.Saving = CpuProfilePresets.Office();
+            cfg.Cpu.Default = CpuProfilePresets.Game();
+            cfg.Cpu.Performance = CpuProfilePresets.Productivity();
+
+            cfg.Cpu.Custom = CpuProfilePresets.Game();
             cfg.Cpu.Custom.CpuLongPower = longP;
             cfg.Cpu.Custom.CpuShortPower = shortP;
             cfg.Cpu.Custom.CpuTempWall = wall;
             cfg.Cpu.CpuProfile = "custom";
+            cfg.App.ApplyCpuProfileOnModeChange = true;
 
             Bridge.Instance.ApplyConfig(cfg);
             Bridge.Instance.FlushIfDirty();
@@ -71,7 +86,7 @@ public static class AppSettingsImporter
             Logger.Info(
                 $"已从 AppSettings 导入: Quiet={cfg.Fan.QuietModeFanRpm}rpm, " +
                 $"Balance={cfg.Fan.BalanceModeFanRpm}rpm, Perf={cfg.Fan.PerformanceModeFanRpm}rpm, " +
-                $"L={longP}W S={shortP}W T={wall}℃");
+                $"Custom L={longP}W S={shortP}W T={wall}℃; 三档预设已刷新为 7945HX A/B/C");
 
             return new CommandResult(true, "导入成功", new
             {
@@ -80,7 +95,13 @@ public static class AppSettingsImporter
                 cfg.Fan.PerformanceModeFanRpm,
                 LongPower = longP,
                 ShortPower = shortP,
-                TempWall = wall
+                TempWall = wall,
+                Presets = new
+                {
+                    Office = Summarize(cfg.Cpu.Saving),
+                    Game = Summarize(cfg.Cpu.Default),
+                    Productivity = Summarize(cfg.Cpu.Performance)
+                }
             });
         }
         catch (Exception ex)
@@ -117,4 +138,7 @@ public static class AppSettingsImporter
         int p = Math.Clamp(percent, 0, 100);
         return (int)Math.Round(p / 100.0 * 5800);
     }
+
+    private static object Summarize(CpuProfileData p) =>
+        new { p.CpuLongPower, p.CpuShortPower, p.CpuTempWall, p.RecommendedCurveOptimizer };
 }

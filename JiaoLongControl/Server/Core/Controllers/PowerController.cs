@@ -1,7 +1,9 @@
 ﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
+using JiaoLongControl.Server.Core.Models;
 using JiaoLongControl.Server.Core.Utils;
+using JiaoLongControl.Server.Interop;
 
 namespace JiaoLongControl.Server.Core.Controllers;
 
@@ -9,6 +11,12 @@ namespace JiaoLongControl.Server.Core.Controllers;
 [ClassInterface(ClassInterfaceType.AutoDual)]
 public class PowerController
 {
+    // PERFBOOSTMODE / PERFEPP / CPMINCORES
+    private const string GuidBoostMode = "be337238-0d82-4146-a960-4f3749d470c7";
+    private const string GuidEpp = "36687f9e-e3a5-4dbf-b1dc-15eb381c6863";
+    private const string GuidCpMinCores = "0cc5b647-c1df-4637-891a-dec35c318583";
+    private const int PowerCfgTimeoutMs = 5000;
+
     public CommandResult SetCPUMaxFrequency(uint mhz)
     {
         var commands = new[]
@@ -23,9 +31,7 @@ public class PowerController
         {
             var result = RunPowerCfg(cmd);
             if (!result.Success)
-            {
                 return result;
-            }
         }
         return new CommandResult(true, $"CPU 最大频率已限制为 {mhz} MHz");
     }
@@ -42,59 +48,117 @@ public class PowerController
         {
             var result = RunPowerCfg(cmd);
             if (!result.Success)
-            {
                 return result;
-            }
         }
         return new CommandResult(true, "CPU 频率限制已取消");
     }
 
     public CommandResult DisableTurbo()
     {
-        var commands = new[]
+        try
         {
-            "/attributes SUB_PROCESSOR be337238-0d82-4146-a960-4f3749d470c7 -ATTRIB_HIDE",
-            "/setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFBOOSTMODE 0",
-            "/setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFBOOSTMODE 0",
-            "/setactive SCHEME_CURRENT"
-        };
-        foreach (var cmd in commands)
-        {
-            var result = RunPowerCfg(cmd);
-            if (!result.Success)
-            {
-                return result;
-            }
+            var soft = EffectiveSoftSchedule();
+            return ApplySoftSchedule(soft, turboEnabled: false);
         }
-        return new CommandResult(true, "睿频已禁用");
+        catch
+        {
+            return ApplySoftSchedule(SoftSchedulePresets.Game(), turboEnabled: false);
+        }
     }
 
+    /// <summary>
+    /// 开启睿频：按有效 SoftSchedule 写入（QuietDaily 瞬时优先于档位），不再强制两边都是 Aggressive(2)。
+    /// </summary>
     public CommandResult EnableTurbo()
+    {
+        try
+        {
+            var soft = EffectiveSoftSchedule();
+            return ApplySoftSchedule(soft, turboEnabled: true);
+        }
+        catch
+        {
+            return ApplySoftSchedule(SoftSchedulePresets.Game(), turboEnabled: true);
+        }
+    }
+
+    private static SoftScheduleData EffectiveSoftSchedule()
+    {
+        var cpu = Bridge.Instance.Config.Cpu.Active;
+        return Bridge.Instance.CpuPowerKeepAlive.GetEffectiveSoftSchedule(cpu.SoftSchedule);
+    }
+
+    /// <summary>
+    /// 按下发软调度：EPP、核心停放最小比例、睿频模式（AC/DC 分设）。
+    /// <paramref name="turboEnabled"/> 为 false 时强制 Boost=0。
+    /// </summary>
+    public CommandResult ApplySoftSchedule(
+        byte acEpp, byte dcEpp,
+        byte acCpMinCores, byte dcCpMinCores,
+        byte acBoostMode, byte dcBoostMode,
+        bool turboEnabled)
+    {
+        byte acBoost = turboEnabled ? ClampByte(acBoostMode, 0, 2) : (byte)0;
+        byte dcBoost = turboEnabled ? ClampByte(dcBoostMode, 0, 2) : (byte)0;
+        return ApplySoftScheduleCore(
+            ClampByte(acEpp, 0, 100),
+            ClampByte(dcEpp, 0, 100),
+            ClampByte(acCpMinCores, 0, 100),
+            ClampByte(dcCpMinCores, 0, 100),
+            acBoost,
+            dcBoost);
+    }
+
+    /// <summary>供宿主内部调用；不暴露给 COM（WebView 请用七参数重载）。</summary>
+    [ComVisible(false)]
+    public CommandResult ApplySoftSchedule(SoftScheduleData? schedule, bool turboEnabled)
+    {
+        schedule ??= SoftSchedulePresets.Game();
+        return ApplySoftSchedule(
+            schedule.AcEpp, schedule.DcEpp,
+            schedule.AcCpMinCores, schedule.DcCpMinCores,
+            schedule.AcBoostMode, schedule.DcBoostMode,
+            turboEnabled);
+    }
+
+    private CommandResult ApplySoftScheduleCore(
+        byte acEpp, byte dcEpp, byte acCp, byte dcCp, byte acBoost, byte dcBoost)
     {
         var commands = new[]
         {
-            "/setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFBOOSTMODE 2",
-            "/setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFBOOSTMODE 2",
+            // 与限频一致：清 Win11 电源叠加层，避免盖掉 EPP/停放
+            "/overlaysetactive overlay_scheme_none",
+            $"/attributes SUB_PROCESSOR {GuidBoostMode} -ATTRIB_HIDE",
+            $"/attributes SUB_PROCESSOR {GuidEpp} -ATTRIB_HIDE",
+            $"/attributes SUB_PROCESSOR {GuidCpMinCores} -ATTRIB_HIDE",
+            $"/setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFBOOSTMODE {acBoost}",
+            $"/setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFBOOSTMODE {dcBoost}",
+            $"/setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFEPP {acEpp}",
+            $"/setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFEPP {dcEpp}",
+            $"/setacvalueindex SCHEME_CURRENT SUB_PROCESSOR CPMINCORES {acCp}",
+            $"/setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR CPMINCORES {dcCp}",
             "/setactive SCHEME_CURRENT"
         };
+
         foreach (var cmd in commands)
         {
             var result = RunPowerCfg(cmd);
             if (!result.Success)
-            {
                 return result;
-            }
         }
-        return new CommandResult(true, "睿频已开启");
+
+        return new CommandResult(true,
+            $"软调度已应用: EPP AC/DC={acEpp}/{dcEpp}, CPMIN={acCp}/{dcCp}, Boost={acBoost}/{dcBoost}");
     }
+
+    private static byte ClampByte(byte value, byte min, byte max) =>
+        value < min ? min : value > max ? max : value;
 
     public CommandResult GetCPUMaxFrequency()
     {
         var result = RunPowerCfgWithOutput("/query SCHEME_CURRENT SUB_PROCESSOR PROCFREQMAX");
         if (!result.Success)
-        {
             return new CommandResult(false, result.Message);
-        }
 
         if (!TryParseLastTwoHex((string)result.Data!, out var ac, out var dc))
             return new CommandResult(false, "解析失败");
@@ -102,6 +166,9 @@ public class PowerController
         return new CommandResult(true, "ok", (ac, dc));
     }
 
+    /// <summary>
+    /// Data: Ac/Dc 为 PERFBOOSTMODE 原始值；AcEnabled/DcEnabled 为是否非 0。
+    /// </summary>
     public CommandResult GetTurboEnabled()
     {
         var result = RunPowerCfgWithOutput("/query SCHEME_CURRENT SUB_PROCESSOR PERFBOOSTMODE");
@@ -114,7 +181,16 @@ public class PowerController
         return new CommandResult(
             true,
             "ok",
-            (acVal != 0, dcVal != 0)
+            new
+            {
+                Ac = acVal,
+                Dc = dcVal,
+                AcEnabled = acVal != 0,
+                DcEnabled = dcVal != 0,
+                // 兼容旧前端解构 (ac, dc) 布尔语义
+                ac = acVal != 0,
+                dc = dcVal != 0
+            }
         );
     }
 
@@ -132,14 +208,19 @@ public class PowerController
                 RedirectStandardError = true
             };
             using var process = Process.Start(psi);
-            string output = process!.StandardOutput.ReadToEnd();
+            if (process == null)
+                return new CommandResult(false, $"[PowerController] 无法启动 powercfg: {arguments}");
+
+            string output = process.StandardOutput.ReadToEnd();
             string error = process.StandardError.ReadToEnd();
-            process.WaitForExit(5000);
+            if (!process.WaitForExit(PowerCfgTimeoutMs))
+            {
+                try { process.Kill(entireProcessTree: true); } catch { /* ignore */ }
+                return new CommandResult(false, $"[PowerController] powercfg 超时 ({PowerCfgTimeoutMs}ms): {arguments}");
+            }
 
             if (process.ExitCode != 0)
-            {
                 return new CommandResult(false, $"[PowerController] powercfg {arguments} 失败: {error}");
-            }
         }
         catch (Exception ex)
         {
@@ -164,14 +245,19 @@ public class PowerController
             };
 
             using var process = Process.Start(psi);
-            string output = process!.StandardOutput.ReadToEnd();
+            if (process == null)
+                return new CommandResult(false, $"无法启动 powercfg: {arguments}");
+
+            string output = process.StandardOutput.ReadToEnd();
             string error = process.StandardError.ReadToEnd();
-            process.WaitForExit(5000);
+            if (!process.WaitForExit(PowerCfgTimeoutMs))
+            {
+                try { process.Kill(entireProcessTree: true); } catch { /* ignore */ }
+                return new CommandResult(false, $"powercfg 超时 ({PowerCfgTimeoutMs}ms): {arguments}");
+            }
 
             if (process.ExitCode != 0)
-            {
                 return new CommandResult(false, $"powercfg {arguments} 失败: {error}");
-            }
 
             return new CommandResult(true, "ok", output);
         }

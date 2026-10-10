@@ -1,6 +1,6 @@
 # Phase 0 基线验收清单（7945HX + RTX 4060）
 
-工程路径：`D:\Application\JiaolongControl`（分支 `remake/jiaolong-control`，版本 10.19.33）。
+工程路径：`D:\Application\JiaolongControl`（分支 `remake/jiaolong-control`，版本 10.19.34）。
 
 ## 构建
 

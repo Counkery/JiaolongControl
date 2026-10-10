@@ -44,10 +44,8 @@ public class SelfStart
         bridge.CPU.SetCpuShortPower(cpu.CpuShortPower);
         bridge.CPU.SetCPUTempWall(cpu.CpuTempWall);
         bridge.Power.SetCPUMaxFrequency(cpu.CpuMaxFrequency);
-        if (cpu.CpuTurbo)
-            bridge.Power.EnableTurbo();
-        else
-            bridge.Power.DisableTurbo();
+        // 软调度含 Boost；勿再单独 EnableTurbo（会把 AC/DC 一律打成 2）
+        bridge.Power.ApplySoftSchedule(cpu.SoftSchedule, cpu.CpuTurbo);
 
         // 首次下发后启动保活（与监控采集分离，避免功耗被电源策略冲掉）
         bridge.CpuPowerKeepAlive.UpdateTarget(cpu.CpuLongPower, cpu.CpuShortPower, cpu.CpuTempWall);

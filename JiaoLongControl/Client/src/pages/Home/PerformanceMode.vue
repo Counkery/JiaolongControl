@@ -8,16 +8,28 @@ defineProps<{
     icon: string
     active: boolean
   }>
+  quietDailyLoading?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'change-mode', id: SystemPerMode): void
+  (e: 'quiet-daily'): void
 }>()
 </script>
 
 <template>
   <div class="col-span-5 glass-card p-6 flex flex-col">
-    <h2 class="text-[15px] font-medium text-ink/90 mb-6">性能模式</h2>
+    <div class="flex items-center justify-between mb-4 gap-3">
+      <h2 class="text-[15px] font-medium text-ink/90">性能模式</h2>
+      <button
+        :disabled="quietDailyLoading"
+        class="text-[11px] font-semibold px-3 py-1.5 rounded-lg border border-ink/10 hover:bg-ink/5 disabled:opacity-50 text-gray-300"
+        title="均衡 + 转速上限 3500 + 温度墙 93℃"
+        @click="emit('quiet-daily')"
+      >
+        {{ quietDailyLoading ? '应用中…' : '安静日常' }}
+      </button>
+    </div>
     <div class="flex-1 grid grid-cols-3 gap-3 items-center">
       <button
         v-for="mode in modes"

@@ -10,6 +10,7 @@ namespace JiaoLongControl.Server
     public partial class App : Application
     {
         private static Mutex? _mutex;
+        private static int _cleanupOnce;
         private readonly ILog Logger = LogManager.GetLogger(typeof(App));
 
         protected override void OnStartup(StartupEventArgs e)
@@ -88,9 +89,13 @@ namespace JiaoLongControl.Server
 
         private void Cleanup()
         {
+            if (Interlocked.Exchange(ref _cleanupOnce, 1) != 0)
+                return;
             try
             {
-                Bridge.Instance.Fan.RemoveFanSpeed();
+                // 先停软件曲线（内部交回 EC），再兜底关 FAAP / 清 Blding 强制转速
+                Bridge.Instance.AutoFan.Stop();
+                Bridge.Instance.Fan.RestoreEcAutoFan();
                 Bridge.Instance.Dispose();
             }
             catch (Exception ex)

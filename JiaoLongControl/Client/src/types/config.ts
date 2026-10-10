@@ -23,6 +23,10 @@ export interface AppSectionType {
   CpuPowerKeepAliveEnabled: boolean
   /** 优先 PawnIO，避免 WinRing0 */
   PreferPawnIO: boolean
+  /** 切换 EC 性能模式时同步 CPU 档位并下发功耗 */
+  ApplyCpuProfileOnModeChange: boolean
+  /** 电池阈值外挂工具目录 */
+  BatteryThresholdToolDir: string
   /** 主窗口记忆宽度 (物理像素), 0 = 未记忆, 与显示器 DPI/缩放无关 */
   WindowPixelWidth: number
   /** 主窗口记忆高度 (物理像素), 0 = 未记忆, 与显示器 DPI/缩放无关 */
@@ -33,12 +37,26 @@ export interface AppSectionType {
   WindowHeight: number
 }
 
+/** Windows 软调度（powercfg）：EPP / 停放 / Boost，AC·DC 分设 */
+export interface SoftScheduleDataType {
+  AcEpp: number
+  DcEpp: number
+  AcCpMinCores: number
+  DcCpMinCores: number
+  /** 0 关 / 1 开 / 2 激进 */
+  AcBoostMode: number
+  DcBoostMode: number
+}
+
 export interface CpuProfileDataType {
   CpuLongPower: number
   CpuShortPower: number
   CpuTempWall: number
   CpuMaxFrequency: number
   CpuTurbo: boolean
+  /** 推荐 Curve Optimizer 全核偏移（负=降压） */
+  RecommendedCurveOptimizer?: number
+  SoftSchedule?: SoftScheduleDataType
 }
 
 export interface CpuSectionType {
@@ -65,6 +83,10 @@ export interface FanSectionType {
   QuietModeFanRpm: number
   BalanceModeFanRpm: number
   PerformanceModeFanRpm: number
+  /** 软件曲线升速上限 RPM/s */
+  RampUpRpmPerSec?: number
+  /** 软件曲线降速上限 RPM/s */
+  RampDownRpmPerSec?: number
   CpuFanCurve: FanPoint[]
   GpuFanCurve: FanPoint[]
 }

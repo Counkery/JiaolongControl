@@ -360,7 +360,14 @@ public class RyzenSmuController : PawnIO
             RyzenSmuFamily.FP7_FP8_Strix => 0x1Au, 
             _ => 0x60u 
         };
-        return Send(cmd, (coreIdx << 8) | (mhz & 0xFF), false, "Per Core OC Clock");
+        // 频率为 MHz 全值，勿 & 0xFF；AM5 双 CCD 打包核索引
+        uint arg = CurrentFamily switch
+        {
+            RyzenSmuFamily.AM5_V1 =>
+                ((coreIdx / 8) << 28) | ((coreIdx % 8) << 20) | (mhz & 0xFFFFFu),
+            _ => (coreIdx << 20) | (mhz & 0xFFFFFu)
+        };
+        return Send(cmd, arg, false, "Per Core OC Clock");
     }
 
     public CommandResult SetOcVolt(uint millivolts)
@@ -399,6 +406,8 @@ public class RyzenSmuController : PawnIO
     #endregion
 
     #region (Curve Optimizer)
+    // 策略：功耗墙以 EC CustomMode（SPL/SPPT/温度墙）为准；SMU 侧重 Curve Optimizer。
+    // 勿与 EC 保活同时猛改 PPT/STAPM，否则墙易来回跳。
 
     public CommandResult SetCurveOptimizerAll(int value)
     {
@@ -413,11 +422,13 @@ public class RyzenSmuController : PawnIO
 
     public CommandResult SetCurveOptimizerPerCore(uint coreIdx, int value)
     {
-        uint marginArg = (uint)((value < 0 ? 0x100000 : 0) + value) & 0xFFFFu;
+        // 符号-幅度：0x100000 | |offset|（各平台统一，避免 (uint)负值 & 掩码与符号位混用）
+        uint magnitude = (uint)Math.Abs(value) & 0xFFFFFu;
+        uint marginArg = (value < 0 ? 0x100000u : 0u) | magnitude;
         return CurrentFamily switch {
-            RyzenSmuFamily.FP6 => TrySend((coreIdx << 20) | ((uint)value & 0xFFFFFu), $"Curve Optimizer Core {coreIdx}", (0x54, true), (0x52, false)),
-            RyzenSmuFamily.FP7_FP8 => TrySend((coreIdx << 20) | ((uint)value & 0xFFFFFu), $"Curve Optimizer Core {coreIdx}", (0x4B, true), (0x53, false)),
-            RyzenSmuFamily.FP7_FP8_Strix => TrySend((coreIdx << 20) | ((uint)value & 0xFFFFFu), $"Curve Optimizer Core {coreIdx}", (0x4B, true), (0x53, false)),
+            RyzenSmuFamily.FP6 => TrySend((coreIdx << 20) | marginArg, $"Curve Optimizer Core {coreIdx}", (0x54, true), (0x52, false)),
+            RyzenSmuFamily.FP7_FP8 => TrySend((coreIdx << 20) | marginArg, $"Curve Optimizer Core {coreIdx}", (0x4B, true), (0x53, false)),
+            RyzenSmuFamily.FP7_FP8_Strix => TrySend((coreIdx << 20) | marginArg, $"Curve Optimizer Core {coreIdx}", (0x4B, true), (0x53, false)),
             _ => TrySend((((coreIdx / 8) << 28) | ((coreIdx % 8) << 20)) | marginArg, $"Curve Optimizer Core {coreIdx}", (0x35, true), (0x06, false))
         };
     }

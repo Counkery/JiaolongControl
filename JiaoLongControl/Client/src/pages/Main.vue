@@ -1,13 +1,28 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import RightSide from '@/components/layout/RightSide.vue'
 import TitleBar from '@/components/layout/TitleBar.vue'
-import useStore, {HomeCardType} from '@/stores'
+import useStore, { HomeCardType, resolveInitialRoute } from '@/stores'
 
 const store = useStore()
+const router = useRouter()
 
 function onClickMenuItem(key: number) {
+  const item = HomeCardType.find((p) => p.num === key)
+  if (!item) return
   store.setPage(key)
+  if (router.currentRoute.value.name !== item.route) {
+    void router.push({ name: item.route })
+  }
 }
+
+onMounted(() => {
+  const name = resolveInitialRoute()
+  if (router.currentRoute.value.name !== name) {
+    void router.replace({ name })
+  }
+})
 
 // “设置”页固定渲染在侧边栏底部，主导航仅显示其余页面（按标题查找，避免依赖固定序号）
 const settingsNum = HomeCardType.find((item) => item.title === '设置')?.num ?? 8

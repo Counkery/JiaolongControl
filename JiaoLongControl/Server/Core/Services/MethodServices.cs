@@ -3,9 +3,13 @@ using JiaoLongControl.Server.Core.Models;
 
 namespace JiaoLongControl.Server.Core.Services
 {
+    // GetValue 失败时：带 Unknow=255 的枚举必须返回 Unknow，勿用 default(0) 伪造成功值。
     public static class MethodServices
     {
         private const int BufferLength = 32;
+
+        /// <summary>串行化 EC WMI，避免 KeepAlive / 切模式 / UI 应用交错 MiInterface。</summary>
+        private static readonly object WmiLock = new();
 
         private static byte[] MakeMethodParams(MethodType methodType, MethodName methodName)
         {
@@ -52,8 +56,8 @@ namespace JiaoLongControl.Server.Core.Services
         private static Tuple<bool, byte[]> ExecuteMethod(byte[] inData)
         {
             if (inData.Length != BufferLength)
-                return new Tuple<bool, byte[]>(false, null);
-            try
+                return new Tuple<bool, byte[]>(false, null!);
+            lock (WmiLock)
             {
                 try
                 {
@@ -61,16 +65,12 @@ namespace JiaoLongControl.Server.Core.Services
                     var parameters = mo.GetMethodParameters("MiInterface");
                     parameters["InData"] = inData;
                     var output = mo.InvokeMethod("MiInterface", parameters, null)?["OutData"] as byte[];
-                    return new Tuple<bool, byte[]>(output != null, output);
+                    return new Tuple<bool, byte[]>(output != null, output!);
                 }
                 catch
                 {
-                    return new Tuple<bool, byte[]>(false, null);
+                    return new Tuple<bool, byte[]>(false, null!);
                 }
-            }
-            catch
-            {
-                return new Tuple<bool, byte[]>(false, null);
             }
         }
 
@@ -79,6 +79,16 @@ namespace JiaoLongControl.Server.Core.Services
             if (typeof(T) == typeof(Tuple<int, int>)) return (T)(object)new Tuple<int, int>(-1, -1);
             if (typeof(T) == typeof(Tuple<int, int, int>)) return (T)(object)new Tuple<int, int, int>(-1, -1, -1);
             if (typeof(T) == typeof(byte)) return (T)(object)byte.MaxValue;
+            if (typeof(T) == typeof(SystemPerMode)) return (T)(object)SystemPerMode.Unknow;
+            if (typeof(T) == typeof(ResultState)) return (T)(object)ResultState.Unknow;
+            if (typeof(T) == typeof(RGBKeyboardBrightnessLevel))
+                return (T)(object)RGBKeyboardBrightnessLevel.Unknow;
+            if (typeof(T) == typeof(RGBKeyboardMode))
+                return (T)(object)RGBKeyboardMode.Unknow;
+            if (typeof(T) == typeof(CPUPower))
+                return (T)(object)CPUPower.Unknow;
+            if (typeof(T) == typeof(GpuMode))
+                return (T)(object)GpuMode.Unknow;
             return default(T)!;
         }
     }

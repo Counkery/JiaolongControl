@@ -45,4 +45,19 @@ public class ConfigController
             return AppSettingsImporter.ImportFromDefaultLegacyPath();
         return AppSettingsImporter.ImportFromFile(path);
     }
+
+    /// <summary>解析电池阈值外挂工具目录。</summary>
+    public CommandResult ResolveBatteryThresholdToolDir()
+    {
+        return BatteryThresholdLauncher.ResolveToolDir(Bridge.Instance.Config.App.BatteryThresholdToolDir);
+    }
+
+    /// <summary>
+    /// 外挂启动充电阈值脚本（需管理员；不内嵌 WinRing0）。
+    /// enable=true 时 low/high 为百分比；allowInitialDischarge 对应原生工具参数。
+    /// </summary>
+    public CommandResult LaunchBatteryThreshold(bool enable, int low, int high, bool allowInitialDischarge)
+    {
+        return BatteryThresholdLauncher.Launch(enable, low, high, allowInitialDischarge);
+    }
 }

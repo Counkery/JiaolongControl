@@ -4,6 +4,7 @@ import SettingToggle from '@/components/common/SettingToggle.vue'
 import PawnIODriverMode from './Settings/components/PawnIODriverMode.vue'
 import ThemeSetting from './Settings/components/ThemeSetting.vue'
 import BootAutoStart from './Settings/components/BootAutoStart.vue'
+import BatteryThreshold from './Settings/components/BatteryThreshold.vue'
 import {useConfigStore} from '@/stores/config'
 import type {JiaoLongConfigType} from '@/types/config'
 
@@ -20,8 +21,9 @@ interface ToggleCard {
 
 const toggleCards: ToggleCard[] = [
   {
-    title: '自启动高级风扇控制系统',
-    description: '启用后，软件将在后台实时监控硬件温度，并依据【风扇曲线】页面中用户自定义的策略来动态调整风扇转速',
+    title: '自启动温度曲线（进阶）',
+    description:
+      '开机启动软件风扇曲线（Blding 轮询）。日常安静请优先用主页「安静日常」或【风扇】页 WMI 转速上限，勿与上限双开。',
     configPath: 'App.BootAdvancedFanControlSystem',
   },
   {
@@ -95,6 +97,7 @@ const visibleCards = computed(() => {
       />
 
       <PawnIODriverMode key="pawnio" />
+      <BatteryThreshold key="battery" />
     </TransitionGroup>
   </div>
 </template>

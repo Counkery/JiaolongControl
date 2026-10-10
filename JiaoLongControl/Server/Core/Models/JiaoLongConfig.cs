@@ -51,6 +51,12 @@ public class AppSection
     [ConfigComment("优先使用 PawnIO 驱动路径 (避免 WinRing0); 仅作策略提示, 实际由 Drivers 层决定")]
     public bool PreferPawnIO { get; set; } = true;
 
+    [ConfigComment("切换 EC 性能模式时同步 CPU 档位并下发功耗/温度墙 (静音→Saving, 均衡→Default, 性能→Performance)")]
+    public bool ApplyCpuProfileOnModeChange { get; set; } = true;
+
+    [ConfigComment("电池阈值工具目录 (含 NativeEnable.cmd / NativeDisable.cmd), 空则尝试常见路径")]
+    public string BatteryThresholdToolDir { get; set; } = "";
+
     [ConfigComment("主窗口记忆宽度 (物理像素), 0 = 未记忆, 默认按 1300×820 物理像素启动, 不随 DPI/缩放放大, 跨屏物理大小不变")]
     public double WindowPixelWidth { get; set; }
 
@@ -69,26 +75,17 @@ public class CpuSection
     [ConfigComment("当前选中档位: default / performance / saving / custom")]
     public string CpuProfile { get; set; } = "default";
 
-    [ConfigComment("默认档位参数")]
-    public CpuProfileData Default { get; set; } = new()
-    {
-        CpuLongPower = 45, CpuShortPower = 65, CpuTempWall = 90, CpuMaxFrequency = 4400
-    };
+    [ConfigComment("游戏均衡档 (Default): 蛟龙16Pro 2023 / 7945HX 双烤约 75–80W")]
+    public CpuProfileData Default { get; set; } = CpuProfilePresets.Game();
 
-    [ConfigComment("高性能档位参数")]
-    public CpuProfileData Performance { get; set; } = new()
-    {
-        CpuLongPower = 65, CpuShortPower = 90, CpuTempWall = 95, CpuMaxFrequency = 4700
-    };
+    [ConfigComment("生产力档 (Performance): 高负载编译/渲染, 注意散热与噪音")]
+    public CpuProfileData Performance { get; set; } = CpuProfilePresets.Productivity();
 
-    [ConfigComment("节能档位参数")]
-    public CpuProfileData Saving { get; set; } = new()
-    {
-        CpuLongPower = 30, CpuShortPower = 45, CpuTempWall = 85, CpuMaxFrequency = 3800
-    };
+    [ConfigComment("办公静音档 (Saving): 轻负载低热")]
+    public CpuProfileData Saving { get; set; } = CpuProfilePresets.Office();
 
-    [ConfigComment("自定义档位参数")]
-    public CpuProfileData Custom { get; set; } = new();
+    [ConfigComment("自定义档位参数 (种子同游戏均衡, 可任意改)")]
+    public CpuProfileData Custom { get; set; } = CpuProfilePresets.Game();
 
     [YamlIgnore]
     public CpuProfileData Active => CpuProfile switch
@@ -100,15 +97,135 @@ public class CpuSection
     };
 }
 
+/// <summary>
+/// 蛟龙 16 Pro 2023 (7945HX) 出厂三档预设。前后端重置逻辑应对齐此处数值。
+/// </summary>
+public static class CpuProfilePresets
+{
+    /// <summary>A 办公静音：轻负载、低热。</summary>
+    public static CpuProfileData Office() => new()
+    {
+        CpuLongPower = 45,
+        CpuShortPower = 60,
+        CpuTempWall = 90,
+        CpuMaxFrequency = 4400,
+        CpuTurbo = true,
+        RecommendedCurveOptimizer = -8,
+        SoftSchedule = SoftSchedulePresets.Office()
+    };
+
+    /// <summary>B 游戏均衡：同机型双烤甜点区约 75–80W，短时冲刺。</summary>
+    public static CpuProfileData Game() => new()
+    {
+        CpuLongPower = 78,
+        CpuShortPower = 108,
+        CpuTempWall = 95,
+        CpuMaxFrequency = 5150,
+        CpuTurbo = true,
+        RecommendedCurveOptimizer = -12,
+        SoftSchedule = SoftSchedulePresets.Game()
+    };
+
+    /// <summary>C 生产力：高负载持续，略抬长期功耗与温度墙。</summary>
+    public static CpuProfileData Productivity() => new()
+    {
+        CpuLongPower = 90,
+        CpuShortPower = 115,
+        CpuTempWall = 96,
+        CpuMaxFrequency = 5250,
+        CpuTurbo = true,
+        RecommendedCurveOptimizer = -10,
+        SoftSchedule = SoftSchedulePresets.Productivity()
+    };
+}
+
+/// <summary>
+/// Windows 软调度（powercfg SUB_PROCESSOR）：EPP / 核心停放下限 / 睿频模式，AC/DC 分设。
+/// 不替代 EC 功耗墙；避免桌面式 MIN%=100 硬钉核。
+/// </summary>
+public static class SoftSchedulePresets
+{
+    /// <summary>办公：敢停放、偏能效，保响应即可。</summary>
+    public static SoftScheduleData Office() => new()
+    {
+        AcEpp = 55,
+        DcEpp = 80,
+        AcCpMinCores = 5,
+        DcCpMinCores = 0,
+        AcBoostMode = 1,
+        DcBoostMode = 1
+    };
+
+    /// <summary>游戏：插电偏性能但仍允许停放，避免强行摊满 32 线程。</summary>
+    public static SoftScheduleData Game() => new()
+    {
+        AcEpp = 25,
+        DcEpp = 50,
+        AcCpMinCores = 15,
+        DcCpMinCores = 5,
+        AcBoostMode = 2,
+        DcBoostMode = 1
+    };
+
+    /// <summary>安静日常：相对游戏略提高 EPP、略降停放下限。</summary>
+    public static SoftScheduleData QuietDaily() => new()
+    {
+        AcEpp = 35,
+        DcEpp = 55,
+        AcCpMinCores = 10,
+        DcCpMinCores = 5,
+        AcBoostMode = 2,
+        DcBoostMode = 1
+    };
+
+    /// <summary>生产力：少停放、EPP 偏性能，方便真多线程铺开。</summary>
+    public static SoftScheduleData Productivity() => new()
+    {
+        AcEpp = 0,
+        DcEpp = 40,
+        AcCpMinCores = 70,
+        DcCpMinCores = 25,
+        AcBoostMode = 2,
+        DcBoostMode = 1
+    };
+}
+
+public class SoftScheduleData
+{
+    [ConfigComment("插电能效优先策略 EPP (0=性能 … 100=能效)")]
+    [ConfigRange(0, 100)]
+    public byte AcEpp { get; set; } = 25;
+
+    [ConfigComment("电池能效优先策略 EPP (0=性能 … 100=能效)")]
+    [ConfigRange(0, 100)]
+    public byte DcEpp { get; set; } = 50;
+
+    [ConfigComment("插电核心停放最小核心百分比 (CPMINCORES)")]
+    [ConfigRange(0, 100)]
+    public byte AcCpMinCores { get; set; } = 15;
+
+    [ConfigComment("电池核心停放最小核心百分比 (CPMINCORES)")]
+    [ConfigRange(0, 100)]
+    public byte DcCpMinCores { get; set; } = 5;
+
+    [ConfigComment("插电睿频模式 PERFBOOSTMODE (0关/1开/2激进)")]
+    [ConfigRange(0, 2)]
+    public byte AcBoostMode { get; set; } = 2;
+
+    [ConfigComment("电池睿频模式 PERFBOOSTMODE (0关/1开/2激进)")]
+    [ConfigRange(0, 2)]
+    public byte DcBoostMode { get; set; } = 1;
+}
+
 public class CpuProfileData
 {
     [ConfigComment("CPU长期功率限制 (W)")]
     [ConfigRange(5, 120)]
-    public byte CpuLongPower { get; set; } = 45;
+    public byte CpuLongPower { get; set; } = 78;
 
     [ConfigComment("CPU短期功率限制 (W)")]
     [ConfigRange(5, 150)]
-    public byte CpuShortPower { get; set; } = 55;
+    public byte CpuShortPower { get; set; } = 108;
 
     [ConfigComment("CPU温度墙 (℃)")]
     [ConfigRange(60, 105)]
@@ -116,10 +233,17 @@ public class CpuProfileData
 
     [ConfigComment("CPU最大频率 (MHz)")]
     [ConfigRange(2000, 6000)]
-    public uint CpuMaxFrequency { get; set; } = 4800;
+    public uint CpuMaxFrequency { get; set; } = 5150;
 
     [ConfigComment("CPU睿频开关")]
     public bool CpuTurbo { get; set; } = true;
+
+    [ConfigComment("推荐 Curve Optimizer 全核偏移 (负=降压); 应用档位时可选写入 SMU")]
+    [ConfigRange(-30, 30)]
+    public int RecommendedCurveOptimizer { get; set; } = -12;
+
+    [ConfigComment("软调度: EPP / 停放 / Boost，AC·DC 分设")]
+    public SoftScheduleData SoftSchedule { get; set; } = SoftSchedulePresets.Game();
 }
 
 public class GpuSection
@@ -145,23 +269,31 @@ public class FanSection
     [ConfigComment("合并CPU/GPU风扇曲线")]
     public bool FanCurveMerge { get; set; }
 
-    [ConfigComment("手动风扇转速 (RPM)")]
+    [ConfigComment("进阶 Blding 强制设速用 (RPM); 日常请用各模式转速上限")]
     public int ManualFanSpeed { get; set; } = 1500;
 
-    [ConfigComment("切换性能模式时是否恢复该模式绑定的手动风扇转速")]
+    [ConfigComment("切换性能模式时是否按模式重下发 WMI 转速上限 (0x14/0x15)")]
     public bool ApplyFanOnModeChange { get; set; } = true;
 
-    [ConfigComment("安静模式绑定风扇转速 (RPM), 对应第三方 WorkModeFanSpeedSaveValue 量级换算")]
-    [ConfigRange(0, 6800)]
+    [ConfigComment("安静模式转速上限 (RPM), 合法 2200–3500")]
+    [ConfigRange(2200, 3500)]
     public int QuietModeFanRpm { get; set; } = 2700;
 
-    [ConfigComment("均衡模式绑定风扇转速 (RPM)")]
-    [ConfigRange(0, 6800)]
+    [ConfigComment("均衡模式转速上限 (RPM), 合法 3500–5000; 安静日常推荐 3500")]
+    [ConfigRange(3500, 5000)]
     public int BalanceModeFanRpm { get; set; } = 3500;
 
-    [ConfigComment("性能/狂暴模式绑定风扇转速 (RPM), 对应第三方 Fastest/Playing")]
-    [ConfigRange(0, 6800)]
+    [ConfigComment("性能/狂暴模式转速上限 (RPM), 合法 5000–5800")]
+    [ConfigRange(5000, 5800)]
     public int PerformanceModeFanRpm { get; set; } = 5800;
+
+    [ConfigComment("软件曲线升速上限 (RPM/s)，减轻突跳")]
+    [ConfigRange(50, 2000)]
+    public int RampUpRpmPerSec { get; set; } = 600;
+
+    [ConfigComment("软件曲线降速上限 (RPM/s)，减轻温降后仍狂吹")]
+    [ConfigRange(50, 2000)]
+    public int RampDownRpmPerSec { get; set; } = 250;
 
     public List<FanPoint> CpuFanCurve { get; set; } = new()
     {
@@ -242,8 +374,8 @@ public class SmuSection
     [ConfigComment("超频电压 (mV)")]
     public int OcVolt { get; set; }
 
-    [ConfigComment("Curve Optimizer All (负值为降压)")]
-    public int CurveOptimizerAll { get; set; }
+    [ConfigComment("Curve Optimizer All (负值为降压); 7945HX 同机型常用起点约 -12")]
+    public int CurveOptimizerAll { get; set; } = -12;
 
     [ConfigComment("Curve Optimizer 分核偏移 (负值为降压, 索引=核心号)")]
     public List<int> CurveOptimizerPerCore { get; set; } = new();
