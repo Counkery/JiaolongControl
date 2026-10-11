@@ -13,30 +13,33 @@ public static class PerformanceModeBindings
 
     public static void OnModeChanged(SystemPerMode mode)
     {
-        // 真实切模式：结束 QuietDaily 瞬时会话，保活目标回到 Active 档
-        bool hadQuietDaily = false;
+        // 真实切模式：结束 QuietDaily / Portable135 瞬时会话，保活目标回到 Active 档
+        bool hadTransient = false;
+        string? clearedScene = null;
         try
         {
             var keep = Bridge.Instance.CpuPowerKeepAlive;
-            hadQuietDaily = keep.HasTransientOverride;
+            hadTransient = keep.HasTransientOverride;
+            clearedScene = keep.TransientScene;
             // SyncFromConfig(force) 已清瞬时，无需再 Clear
             keep.SyncFromConfig(force: true);
+            Bridge.Instance.RestoreGpuAfterPortableScene(clearedScene);
         }
         catch { /* Bridge 未就绪 */ }
 
         TryApplyModeFanCeiling(mode);
         bool appliedCpu = TryApplyModeCpuProfile(mode);
 
-        // 关闭档位绑定时仍须退出 QuietDaily 的半生效：立刻恢复 Active 软调度/墙
-        if (hadQuietDaily && !appliedCpu)
+        // 关闭档位绑定时仍须退出瞬时半生效：立刻恢复 Active 软调度/墙
+        if (hadTransient && !appliedCpu)
         {
             try { Bridge.Instance.RestoreActiveCpuProfileHardware(); }
             catch { /* ignore */ }
         }
 
-        if (hadQuietDaily)
+        if (hadTransient)
         {
-            try { Bridge.Instance.NotifyQuietDailyChanged(active: false); }
+            try { Bridge.Instance.NotifyQuietDailyChanged(active: false, scene: clearedScene); }
             catch { /* ignore */ }
         }
     }

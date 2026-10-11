@@ -322,7 +322,11 @@ namespace JiaoLongControl.Server.Core.Controllers
                 var (minMw, maxMw) = NvmlInterop.GetPowerManagementLimitConstraints(ResolveGpuIndex(gpuIndex));
                 int milliwatts = Math.Clamp(watts * 1000, minMw, maxMw);
                 NvmlInterop.SetPowerManagementLimit(ResolveGpuIndex(gpuIndex), milliwatts);
-                return new CommandResult(true, $"功耗限制已设置为 {watts} W");
+                int applied = milliwatts / 1000;
+                string msg = applied == watts
+                    ? $"功耗限制已设置为 {applied} W"
+                    : $"请求 {watts} W 超出驱动范围，已钳制为 {applied} W";
+                return new CommandResult(true, msg, applied);
             }
             catch (Exception ex)
             {

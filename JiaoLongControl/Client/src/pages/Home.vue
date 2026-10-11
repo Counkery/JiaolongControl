@@ -6,7 +6,8 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { LineChart } from 'echarts/charts'
 import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
 import { Message } from '@arco-design/web-vue'
-import { PerformanceMode, SystemInfo, SystemPerMode } from '@/utils/bridge'
+import { PerformanceMode, Power, SystemInfo, SystemPerMode } from '@/utils/bridge'
+import { useConfigStore } from '@/stores/config'
 import { useSystemInfoStore } from '@/stores/systemInfo'
 import { chartTheme } from '@/theme/theme'
 import { storeToRefs } from 'pinia'
@@ -23,7 +24,8 @@ import WelcomeBannerComp from './Home/WelcomeBanner.vue'
 use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent])
 
 const systemInfoStore = useSystemInfoStore()
-const { cpuTemp, gpuTemp, fanSpeed, gpuStats } = storeToRefs(systemInfoStore)
+const configStore = useConfigStore()
+const { cpuTemp, gpuTemp, fanSpeed, gpuStats, cpuStats } = storeToRefs(systemInfoStore)
 
 const performanceModes = ref([
   { id: SystemPerMode.QuietMode, name: '静音', icon: iconQuiet, active: false },
@@ -56,6 +58,7 @@ function setMode(id: SystemPerMode) {
 }
 
 const quietDailyLoading = ref(false)
+const portable135Loading = ref(false)
 async function applyQuietDaily() {
   quietDailyLoading.value = true
   try {
@@ -74,6 +77,78 @@ async function applyQuietDaily() {
   }
 }
 
+async function applyPortable135() {
+  portable135Loading.value = true
+  try {
+    const res = await PerformanceMode.ApplyPortable135()
+    if (res.Success) {
+      Message.success(res.Message || '已应用便携 135W')
+      await fetchPerformanceMode()
+    } else {
+      Message.error(res.Message || '应用失败')
+    }
+  } catch {
+    Message.error('应用便携 135W 失败')
+  } finally {
+    portable135Loading.value = false
+  }
+}
+
+const freqPresets = [
+  { mhz: 4500, label: '4.50 GHz' },
+  { mhz: 4750, label: '4.75 GHz' },
+  { mhz: 5150, label: '5.15 GHz' },
+  { mhz: 0, label: '不限制' },
+]
+const freqApplying = ref(false)
+
+function activeCpuBlock() {
+  const cpu = configStore.config?.Cpu
+  if (!cpu) return null
+  const map: Record<string, 'Default' | 'Performance' | 'Saving' | 'Custom'> = {
+    default: 'Default',
+    performance: 'Performance',
+    saving: 'Saving',
+    custom: 'Custom',
+  }
+  return cpu[map[cpu.CpuProfile] ?? 'Default']
+}
+
+const freqMhz = computed(() => activeCpuBlock()?.CpuMaxFrequency ?? 5150)
+const freqLabel = computed(() =>
+  freqMhz.value <= 0 ? '不限制' : `${(freqMhz.value / 1000).toFixed(2)} GHz`,
+)
+const liveFreqGhz = computed(() =>
+  cpuStats.value?.FrequencyMhz ? (cpuStats.value.FrequencyMhz / 1000).toFixed(2) : '—',
+)
+
+async function applyFreqCap(mhz: number) {
+  const block = activeCpuBlock()
+  if (!block || freqApplying.value) return
+  freqApplying.value = true
+  block.CpuMaxFrequency = mhz
+  try {
+    const res =
+      mhz <= 0 ? await Power.ResetCPUMaxFrequency() : await Power.SetCPUMaxFrequency(mhz)
+    if (!res.Success) {
+      Message.error(res.Message || '频率上限设置失败')
+      return
+    }
+    await configStore.saveConfig()
+    Message.success(mhz <= 0 ? '已取消 CPU 频率上限' : `CPU 频率上限 ${mhz} MHz`)
+  } catch {
+    Message.error('频率上限设置失败')
+  } finally {
+    freqApplying.value = false
+  }
+}
+
+function onFreqSlider(value: number | [number, number]) {
+  const mhz = Array.isArray(value) ? value[0] : value
+  void applyFreqCap(mhz)
+}
+
+const gpuCoreMhz = computed(() => parseInt(gpuStats.value?.CoreClock || '0', 10) || 0)
 const cpuUsage = computed(() => systemInfoStore.cpuStats?.Usage ?? 0)
 const gpuUsage = computed(() => parseInt(gpuStats.value?.GpuUtilization || '0', 10))
 // 无噪音传感器: 以风扇转速查表估算 (标定: 3000 RPM≈25 dBA, 4800 RPM≈40 dBA)
@@ -252,18 +327,53 @@ const lineChartOption = computed(() => ({
     />
 
     <!-- Row 2: 模式 & 监控 -->
-    <div class="grid grid-cols-12 gap-3 h-[250px]">
+    <div class="grid grid-cols-12 gap-3 min-h-[260px] h-[290px] min-w-0">
       <PerformanceModeComp
         :modes="performanceModes"
         :quiet-daily-loading="quietDailyLoading"
+        :portable135-loading="portable135Loading"
         @change-mode="setMode"
         @quiet-daily="applyQuietDaily"
+        @portable-135="applyPortable135"
       />
       <CoreMonitoringComp
         :cpu-usage="cpuUsage"
         :gpu-usage="gpuUsage"
         :cpu-temp="cpuTemp"
         :gpu-temp="gpuTemp"
+        :cpu-freq-mhz="cpuStats?.FrequencyMhz ?? 0"
+        :gpu-freq-mhz="gpuCoreMhz"
+      />
+    </div>
+
+    <div class="glass-card px-5 py-4 space-y-3 min-w-0">
+      <div class="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 class="text-[15px] font-medium text-ink/90">CPU 频率上限</h2>
+          <p class="text-[11px] text-gray-500 mt-0.5">
+            当前约 {{ liveFreqGhz }} GHz。写入当前电源方案，并记到正在使用的 CPU 档。0 表示不限制。
+          </p>
+        </div>
+        <span class="text-purple-400 font-mono text-sm">{{ freqLabel }}</span>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button
+          v-for="p in freqPresets"
+          :key="p.mhz"
+          class="text-[11px] px-3 py-1 rounded-lg border border-ink/10 hover:bg-ink/5 text-gray-300 disabled:opacity-50"
+          :disabled="freqApplying"
+          @click="applyFreqCap(p.mhz)"
+        >
+          {{ p.label }}
+        </button>
+      </div>
+      <a-slider
+        :model-value="freqMhz"
+        :min="0"
+        :max="5400"
+        :step="50"
+        :disabled="freqApplying"
+        @change="onFreqSlider"
       />
     </div>
 

@@ -9,26 +9,38 @@ defineProps<{
     active: boolean
   }>
   quietDailyLoading?: boolean
+  portable135Loading?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'change-mode', id: SystemPerMode): void
   (e: 'quiet-daily'): void
+  (e: 'portable-135'): void
 }>()
 </script>
 
 <template>
-  <div class="col-span-5 glass-card p-6 flex flex-col">
+  <div class="col-span-5 min-w-0 glass-card p-6 flex flex-col">
     <div class="flex items-center justify-between mb-4 gap-3">
       <h2 class="text-[15px] font-medium text-ink/90">性能模式</h2>
-      <button
-        :disabled="quietDailyLoading"
-        class="text-[11px] font-semibold px-3 py-1.5 rounded-lg border border-ink/10 hover:bg-ink/5 disabled:opacity-50 text-gray-300"
-        title="均衡 + 转速上限 3500 + 温度墙 93℃"
-        @click="emit('quiet-daily')"
-      >
-        {{ quietDailyLoading ? '应用中…' : '安静日常' }}
-      </button>
+      <div class="flex items-center gap-2 flex-wrap justify-end">
+        <button
+          :disabled="quietDailyLoading || portable135Loading"
+          class="text-[11px] font-semibold px-3 py-1.5 rounded-lg border border-ink/10 hover:bg-ink/5 disabled:opacity-50 text-gray-300"
+          title="均衡 + 转速上限 3500 + 温度墙 93℃"
+          @click="emit('quiet-daily')"
+        >
+          {{ quietDailyLoading ? '应用中…' : '安静日常' }}
+        </button>
+        <button
+          :disabled="quietDailyLoading || portable135Loading"
+          class="text-[11px] font-semibold px-3 py-1.5 rounded-lg border border-amber-500/30 hover:bg-amber-500/10 disabled:opacity-50 text-amber-200/90"
+          title="适配家里 135W 砖：办公 + CPU 45/55W + GPU 60W + 频率 4500"
+          @click="emit('portable-135')"
+        >
+          {{ portable135Loading ? '应用中…' : '便携 135W' }}
+        </button>
+      </div>
     </div>
     <div class="flex-1 grid grid-cols-3 gap-3 items-center">
       <button

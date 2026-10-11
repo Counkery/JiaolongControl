@@ -186,16 +186,19 @@ namespace JiaoLongControl.Server.Core.Controllers
         {
             try
             {
-                bool hadQuiet = Bridge.Instance.CpuPowerKeepAlive.HasTransientOverride;
-                Bridge.Instance.CpuPowerKeepAlive.UpdateTarget(longPower, shortPower, tempWall, clearTransient: true);
+                string? priorScene = Bridge.Instance.CpuPowerKeepAlive.TransientScene;
+                bool hadTransient = Bridge.Instance.CpuPowerKeepAlive.HasTransientOverride;
+                var cleared = Bridge.Instance.CpuPowerKeepAlive.UpdateTarget(
+                    longPower, shortPower, tempWall, clearTransient: true);
+                Bridge.Instance.RestoreGpuAfterPortableScene(cleared ?? priorScene);
                 if (Bridge.Instance.Config.App.CpuPowerKeepAliveEnabled &&
                     !Bridge.Instance.CpuPowerKeepAlive.IsRunning)
                     Bridge.Instance.CpuPowerKeepAlive.Start();
-                if (hadQuiet)
+                if (hadTransient)
                 {
                     if (restoreHardware)
                         Bridge.Instance.RestoreActiveCpuProfileHardware();
-                    Bridge.Instance.NotifyQuietDailyChanged(active: false);
+                    Bridge.Instance.NotifyQuietDailyChanged(active: false, scene: priorScene);
                 }
                 return new CommandResult(true, "保活目标已同步");
             }

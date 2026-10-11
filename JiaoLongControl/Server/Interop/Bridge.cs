@@ -71,7 +71,8 @@ namespace JiaoLongControl.Server.Interop
 
         public void ApplyConfig(JiaoLongConfig config)
         {
-            bool hadQuietDaily = CpuPowerKeepAlive.HasTransientOverride;
+            bool hadTransient = CpuPowerKeepAlive.HasTransientOverride;
+            string? priorScene = CpuPowerKeepAlive.TransientScene;
             JiaoLongConfig previous;
             lock (_configLock)
             {
@@ -79,23 +80,24 @@ namespace JiaoLongControl.Server.Interop
                 Config = config;
             }
 
-            // 仅当 CPU/保活相关字段变化时才结束 QuietDaily；改主题/OSD 等不应冲掉瞬时会话
-            bool endQuietDaily = hadQuietDaily && IsCpuPowerRelatedChange(previous, config);
+            // 仅当 CPU/保活相关字段变化时才结束瞬时场景；改主题/OSD 等不应冲掉
+            bool endTransient = hadTransient && IsCpuPowerRelatedChange(previous, config);
 
             try
             {
-                if (endQuietDaily)
+                if (endTransient)
                 {
                     CpuPowerKeepAlive.SyncFromConfig(force: true);
+                    RestoreGpuAfterPortableScene(priorScene);
                     RestoreActiveCpuProfileHardware();
                 }
-                else if (!hadQuietDaily)
+                else if (!hadTransient)
                 {
                     CpuPowerKeepAlive.SyncFromConfig(force: true);
                 }
                 else
                 {
-                    // QuietDaily 保持中：不 force，避免无关 SetConfig 清瞬时
+                    // 瞬时保持中：不 force，避免无关 SetConfig 清瞬时
                     CpuPowerKeepAlive.SyncFromConfig(force: false);
                 }
 
@@ -110,8 +112,8 @@ namespace JiaoLongControl.Server.Interop
             }
 
             NotifyConfigChanged();
-            if (endQuietDaily)
-                NotifyQuietDailyChanged(active: false);
+            if (endTransient)
+                NotifyQuietDailyChanged(active: false, scene: priorScene);
         }
 
         private static bool IsCpuPowerRelatedChange(JiaoLongConfig a, JiaoLongConfig b)
@@ -169,7 +171,9 @@ namespace JiaoLongControl.Server.Interop
                 CPU.SetCPUTempWall(cpu.CpuTempWall);
                 Power.SetCPUMaxFrequency(cpu.CpuMaxFrequency);
                 Power.ApplySoftSchedule(cpu.SoftSchedule, cpu.CpuTurbo);
-                CpuPowerKeepAlive.UpdateTarget(cpu.CpuLongPower, cpu.CpuShortPower, cpu.CpuTempWall);
+                var cleared = CpuPowerKeepAlive.UpdateTarget(
+                    cpu.CpuLongPower, cpu.CpuShortPower, cpu.CpuTempWall);
+                RestoreGpuAfterPortableScene(cleared);
             }
             catch (Exception ex)
             {
@@ -177,13 +181,36 @@ namespace JiaoLongControl.Server.Interop
             }
         }
 
-        internal void NotifyQuietDailyChanged(bool active)
+        /// <summary>退出 Portable135 时把 GPU 功耗墙写回配置里的值。</summary>
+        internal void RestoreGpuAfterPortableScene(string? clearedScene)
+        {
+            if (!string.Equals(clearedScene, "Portable135", StringComparison.Ordinal))
+                return;
+            try
+            {
+                int watts = Config.Gpu.PowerLimit;
+                if (watts > 0)
+                {
+                    var r = NvidiaGpu.SetPowerLimit(watts);
+                    Logger.Info($"Portable135 结束，GPU 功耗墙恢复 {watts}W: {r.Message}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Portable135 恢复 GPU 功耗失败: {ex.Message}");
+            }
+        }
+
+        internal void NotifyQuietDailyChanged(bool active, string? scene = null)
         {
             try
             {
+                string sceneJson = string.IsNullOrEmpty(scene)
+                    ? "null"
+                    : $"\"{scene.Replace("\"", "", StringComparison.Ordinal)}\"";
                 var json = active
-                    ? "{\"type\":\"quiet-daily-changed\",\"active\":true}"
-                    : "{\"type\":\"quiet-daily-changed\",\"active\":false}";
+                    ? $"{{\"type\":\"quiet-daily-changed\",\"active\":true,\"scene\":{sceneJson}}}"
+                    : $"{{\"type\":\"quiet-daily-changed\",\"active\":false,\"scene\":{sceneJson}}}";
                 _webView?.PostWebMessageAsJson(json);
             }
             catch (Exception ex)

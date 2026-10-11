@@ -246,8 +246,10 @@ export interface BridgeApi {
     Get(): HostBridgePromise<SystemPerMode>
     Set(mode: SystemPerMode): HostBridgePromise<void>
     ApplyQuietDaily(): HostBridgePromise<unknown>
+    ApplyPortable135(): HostBridgePromise<unknown>
     GetQuietDailyActive(): HostBridgePromise<{
       Active: boolean
+      Scene?: string | null
       SoftSchedule?: import('@/types/config').SoftScheduleDataType
     }>
   }
@@ -510,6 +512,7 @@ export const PerformanceMode = {
   Get: () => call(raw.PerformanceMode.Get()),
   Set: (mode: SystemPerMode) => call(raw.PerformanceMode.Set(mode)),
   ApplyQuietDaily: () => call(raw.PerformanceMode.ApplyQuietDaily()),
+  ApplyPortable135: () => call(raw.PerformanceMode.ApplyPortable135()),
   GetQuietDailyActive: () => call(raw.PerformanceMode.GetQuietDailyActive()),
 }
 

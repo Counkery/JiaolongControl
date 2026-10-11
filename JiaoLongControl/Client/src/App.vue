@@ -29,7 +29,7 @@ function onWebViewMessage(e: MessageEvent) {
     } else if (data && data.type === 'quiet-daily-changed') {
       window.dispatchEvent(
         new CustomEvent('jiaolong-quiet-daily-changed', {
-          detail: { active: !!data.active },
+          detail: { active: !!data.active, scene: data.scene ?? null },
         }),
       )
     } else if (data && data.type === 'lock-states-changed') {

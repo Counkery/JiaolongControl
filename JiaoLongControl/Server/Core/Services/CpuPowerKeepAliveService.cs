@@ -31,8 +31,11 @@ public sealed class CpuPowerKeepAliveService : IDisposable
     /// <summary>安静日常等瞬时目标：为 true 时 Loop 不再 SyncFromConfig 覆盖。</summary>
     private bool _transientOverride;
 
-    /// <summary>瞬时软调度（与 QuietDaily 一并生效；退出瞬时会话后清空）。</summary>
+    /// <summary>瞬时软调度（与 QuietDaily / Portable135 一并生效；退出瞬时会话后清空）。</summary>
     private SoftScheduleData? _transientSoft;
+
+    /// <summary>瞬时场景名：QuietDaily / Portable135；无瞬时时为 null。</summary>
+    private string? _transientScene;
 
     public bool IsRunning => _running;
 
@@ -41,11 +44,18 @@ public sealed class CpuPowerKeepAliveService : IDisposable
         get { lock (_lock) return _transientOverride; }
     }
 
+    /// <summary>当前瞬时场景；无覆盖时 null。</summary>
+    public string? TransientScene
+    {
+        get { lock (_lock) return _transientOverride ? _transientScene : null; }
+    }
+
     /// <summary>
     /// 更新期望功耗目标（来自当前 CPU 档位 / UI 应用）。
     /// 默认清除瞬时覆盖，避免 QuietDaily 保活打回旧墙。
     /// </summary>
-    public void UpdateTarget(byte longPower, byte shortPower, byte tempWall, bool clearTransient = true)
+    /// <returns>被清除的瞬时场景名（若有）。</returns>
+    public string? UpdateTarget(byte longPower, byte shortPower, byte tempWall, bool clearTransient = true)
     {
         lock (_lock)
         {
@@ -53,17 +63,22 @@ public sealed class CpuPowerKeepAliveService : IDisposable
             _desiredShort = shortPower;
             _desiredTempWall = tempWall;
             _targetEpoch++;
-            if (clearTransient)
+            string? cleared = null;
+            if (clearTransient && _transientOverride)
             {
+                cleared = _transientScene;
                 _transientOverride = false;
                 _transientSoft = null;
+                _transientScene = null;
             }
+            return cleared;
         }
     }
 
     /// <summary>设置瞬时功耗/软调度目标（不写配置）；softSchedule 必填，避免 Active 与 Soft 分裂。</summary>
     public void SetTransientOverride(
-        byte longPower, byte shortPower, byte tempWall, SoftScheduleData softSchedule)
+        byte longPower, byte shortPower, byte tempWall, SoftScheduleData softSchedule,
+        string scene = "QuietDaily")
     {
         ArgumentNullException.ThrowIfNull(softSchedule);
         lock (_lock)
@@ -72,17 +87,22 @@ public sealed class CpuPowerKeepAliveService : IDisposable
             _desiredShort = shortPower;
             _desiredTempWall = tempWall;
             _transientSoft = softSchedule;
+            _transientScene = string.IsNullOrWhiteSpace(scene) ? "QuietDaily" : scene;
             _transientOverride = true;
             _targetEpoch++;
         }
     }
 
-    public void ClearTransientOverride()
+    /// <returns>清除前的场景名（若有）。</returns>
+    public string? ClearTransientOverride()
     {
         lock (_lock)
         {
+            string? cleared = _transientOverride ? _transientScene : null;
             _transientOverride = false;
             _transientSoft = null;
+            _transientScene = null;
+            return cleared;
         }
     }
 
@@ -105,21 +125,26 @@ public sealed class CpuPowerKeepAliveService : IDisposable
         return fallback ?? SoftSchedulePresets.Game();
     }
 
-    public void SyncFromConfig(bool force = false)
+    /// <returns>force 清除时的原场景名。</returns>
+    public string? SyncFromConfig(bool force = false)
     {
+        string? cleared = null;
         lock (_lock)
         {
             if (_transientOverride && !force)
-                return;
-            if (force)
+                return null;
+            if (force && _transientOverride)
             {
+                cleared = _transientScene;
                 _transientOverride = false;
                 _transientSoft = null;
+                _transientScene = null;
             }
         }
 
         var cpu = Bridge.Instance.Config.Cpu.Active;
         UpdateTarget(cpu.CpuLongPower, cpu.CpuShortPower, cpu.CpuTempWall, clearTransient: true);
+        return cleared;
     }
 
     public CommandResult Start()

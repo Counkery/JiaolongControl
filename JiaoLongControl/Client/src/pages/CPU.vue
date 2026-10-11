@@ -29,6 +29,7 @@ if (infoResult.Success) {
 const acHint = ref('')
 const customModeUnknown = ref(false)
 const quietDailyActive = ref(false)
+const transientScene = ref<string | null>(null)
 const quietDailySoft = ref<SoftScheduleDataType | null>(null)
 
 async function refreshQuietDailyState() {
@@ -36,9 +37,11 @@ async function refreshQuietDailyState() {
     const qd = await PerformanceMode.GetQuietDailyActive()
     if (qd.Success && qd.Data) {
       quietDailyActive.value = !!qd.Data.Active
+      transientScene.value = qd.Data.Scene ?? (qd.Data.Active ? 'QuietDaily' : null)
       quietDailySoft.value = qd.Data.SoftSchedule ?? null
     } else {
       quietDailyActive.value = false
+      transientScene.value = null
       quietDailySoft.value = null
     }
   } catch {
@@ -47,9 +50,10 @@ async function refreshQuietDailyState() {
 }
 
 function onQuietDailyChanged(e: Event) {
-  const detail = (e as CustomEvent<{ active?: boolean }>).detail
+  const detail = (e as CustomEvent<{ active?: boolean; scene?: string | null }>).detail
   if (detail && detail.active === false) {
     quietDailyActive.value = false
+    transientScene.value = null
     quietDailySoft.value = null
     return
   }
@@ -148,6 +152,24 @@ function selectProfile(profile: string) {
 
 // 统一应用逻辑: best-effort——单步失败记录并继续, 最后保存配置并汇总结果。
 // 不做"全有全无": 单点失败(如 SMU 邮箱异常)不应让已生效的功耗/温度设置整体丢失配置。
+async function applyFrequencyNow(value?: number | [number, number]) {
+  if (!activeProfile.value) return
+  const mhz = Array.isArray(value)
+    ? value[0]
+    : typeof value === 'number'
+      ? value
+      : activeProfile.value.CpuMaxFrequency
+  activeProfile.value.CpuMaxFrequency = mhz
+  const res =
+    mhz <= 0 ? await Power.ResetCPUMaxFrequency() : await Power.SetCPUMaxFrequency(mhz)
+  if (!res.Success) {
+    Message.error(res.Message || '频率上限设置失败')
+    return
+  }
+  await configStore.saveConfig()
+  Message.success(mhz <= 0 ? '已取消 CPU 频率上限' : `CPU 频率上限 ${(mhz / 1000).toFixed(2)} GHz`)
+}
+
 async function handleApplyAll() {
   if (!CPUData.value || !activeProfile.value) return
   loading.value = true
@@ -175,8 +197,11 @@ async function handleApplyAll() {
     if (!tempWallRes.Success) {
       failures.push(tempWallRes.Message || '温度墙设置失败')
     }
-    // 4. 设置最大频率
-    const maxFreqRes = await Power.SetCPUMaxFrequency(activeProfile.value.CpuMaxFrequency)
+    // 4. 设置最大频率（0 = 取消 powercfg 上限）
+    const maxFreqRes =
+      activeProfile.value.CpuMaxFrequency <= 0
+        ? await Power.ResetCPUMaxFrequency()
+        : await Power.SetCPUMaxFrequency(activeProfile.value.CpuMaxFrequency)
     if (!maxFreqRes.Success) {
       failures.push(maxFreqRes.Message || '最大频率设置失败')
     }
@@ -322,7 +347,14 @@ async function handleCancel() {
             调整功耗墙与频率；应用档位时同步软调度（EPP / 停放 / Boost），插电与电池分设。
           </p>
           <p
-            v-if="quietDailyActive"
+            v-if="quietDailyActive && transientScene === 'Portable135'"
+            class="text-[11px] text-amber-400/90 mt-2 leading-relaxed"
+          >
+            便携 135W 生效中（CPU 45/55W + GPU 60W + 频率 4500）。点「应用」或切性能模式将退出，GPU
+            功耗墙恢复为配置值。
+          </p>
+          <p
+            v-else-if="quietDailyActive"
             class="text-[11px] text-amber-400/90 mt-2 leading-relaxed"
           >
             安静日常瞬时生效中（墙 93℃ + QuietDaily 软调度）。在本页点「应用」或切换性能模式将退出并恢复当前档配置。
@@ -473,16 +505,35 @@ async function handleCancel() {
                     >ⓘ</span
                   ></span
                 >
-                <span class="text-purple-400 font-medium font-mono"
-                  >{{ (activeProfile.CpuMaxFrequency / 1000).toFixed(1) }} GHz</span
+                <span class="text-purple-400 font-medium font-mono">{{
+                  activeProfile.CpuMaxFrequency <= 0
+                    ? '不限制'
+                    : (activeProfile.CpuMaxFrequency / 1000).toFixed(2) + ' GHz'
+                }}</span>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  v-for="p in [
+                    { mhz: 4500, label: '4.50' },
+                    { mhz: 4750, label: '4.75' },
+                    { mhz: 5150, label: '5.15' },
+                    { mhz: 0, label: '不限制' },
+                  ]"
+                  :key="p.mhz"
+                  type="button"
+                  class="text-[11px] px-2.5 py-1 rounded-lg border border-ink/10 hover:bg-ink/5 text-gray-300"
+                  @click="applyFrequencyNow(p.mhz)"
                 >
+                  {{ p.label }}
+                </button>
               </div>
               <a-slider
                 v-model="activeProfile.CpuMaxFrequency"
-                :min="2000"
-                :max="6000"
-                :step="100"
+                :min="0"
+                :max="5400"
+                :step="50"
                 class="w-full"
+                @change="applyFrequencyNow"
               />
             </div>
           </div>

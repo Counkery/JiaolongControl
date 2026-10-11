@@ -12,7 +12,7 @@
   <a href="https://github.com/GaoXanSheng/JiaolongControl">
     <img src="https://img.shields.io/badge/upstream-GaoXanSheng-555?logo=github" alt="Upstream">
   </a>
-  <img src="https://img.shields.io/badge/version-10.19.47-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-10.19.50-blue" alt="Version">
   <img src="https://img.shields.io/badge/.NET-8.0_WPF-512BD4?logo=dotnet" alt=".NET">
   <img src="https://img.shields.io/badge/Vue-3.5-4FC08D?logo=vuedotjs" alt="Vue">
   <img src="https://img.shields.io/badge/WebView2-前端宿主-0078D7?logo=microsoftedge&logoColor=white" alt="WebView2">
@@ -22,7 +22,7 @@
   </a>
 </p>
 
-本仓库是 [GaoXanSheng/JiaolongControl](https://github.com/GaoXanSheng/JiaolongControl) 的 fork。日常开发在 **`remake/jiaolong-control`**。当前版本 **10.19.47**（见 `JiaoLongControl/JiaoLongControl.csproj` 的 `AppVersion`）。
+本仓库是 [GaoXanSheng/JiaolongControl](https://github.com/GaoXanSheng/JiaolongControl) 的 fork。日常开发在 **`remake/jiaolong-control`**。当前版本 **10.19.50**（见 `JiaoLongControl/JiaoLongControl.csproj` 的 `AppVersion`）。
 
 架构：.NET 8 WPF 宿主 + WebView2 + Vue 3。硬件走 **PawnIO**（Ryzen SMU）和随包 **Blding / `JiaoLongDriver64`**（EC / 风扇），不用 WinRing0。
 
@@ -34,7 +34,7 @@
 
 | 页 | 能力 |
 | --- | --- |
-| 主页 | EC 三档（办公 Quiet / 均衡 Balance / 狂暴 Performance）、「一键安静日常」、模式绑定 CPU 档与风扇上限 |
+| 主页 | EC 三档、「安静日常」、「便携 135W」（CPU+GPU 压到约 105W，适配家里小砖）、模式绑定 CPU/风扇 |
 | 中央处理器 | CustomMode 功耗（SPL/SPPT）、温度墙、频率上限、睿频；A/B/C 预设与软调度 SoftSchedule |
 | 风扇 / 温度曲线 | WMI 转速上限（官方路径）；软件曲线 AutoFan（进阶）；升/降速斜率；满速风扇开关 |
 | 图形处理器 | 独显直连 / 混合、锁频、偏移、功耗墙（有安全范围） |
@@ -99,7 +99,7 @@ dotnet publish JiaoLongControl/JiaoLongControl.csproj -c Release
 
 ### 版本号
 
-唯一来源是 `JiaoLongControl/JiaoLongControl.csproj` 的 `AppVersion`（当前 `10.19.47`）。
+唯一来源是 `JiaoLongControl/JiaoLongControl.csproj` 的 `AppVersion`（当前 `10.19.50`）。
 
 | 段 | 含义 |
 | --- | --- |
@@ -115,7 +115,7 @@ dotnet publish JiaoLongControl/JiaoLongControl.csproj -c Release
 
 上游：[GaoXanSheng/JiaolongControl](https://github.com/GaoXanSheng/JiaolongControl)（分支 `windows/X86-64`）。本 fork 在其架构上针对 7945HX + 4060 做稳定性与日常可用性改造，**未改协议栈选型**（仍是 PawnIO + Blding + WMI）。
 
-| 维度 | 上游 | 本 fork（10.19.47） |
+| 维度 | 上游 | 本 fork（10.19.50） |
 | --- | --- | --- |
 | 性能模式 | Quiet / Balance / Performance | 同左 + **一键安静日常**（瞬时功耗/风扇/软调度，不写坏 Default） |
 | CPU 预设 | 通用配置字段 | **7945HX A/B/C**（45/78/90W 档）+ 切模式联动 |
