@@ -1,72 +1,141 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Text;
 using JiaoLongControl.Server.Interop;
+using log4net;
 
 namespace JiaoLongControl.Server.Core.Native;
 
 /// <summary>
-/// 本程序 OSD 打开时，藏起会叠在一起的旧提示：
-/// 厂家 BLDFnHotkeyUtility 的 FloatingNativeWindow，以及 Windows 音量/亮度/媒体浮层。
+/// 藏起和自绘 OSD 叠在一起的旧提示。
+/// 厂家 OSD 是 BLDFnHotkeyUtility 的 FloatingNativeWindow，弹出时不一定发 EVENT_OBJECT_SHOW，
+/// 所以按进程轮询并移出屏幕。Windows 音量/亮度/媒体浮层在「屏蔽原生浮层」打开时同样处理。
 /// 不结束厂家热键进程，Fn 仍由 EC / WMI 生效。
 /// </summary>
 internal static class NativeOsdSuppressor
 {
-    private static User32.WinEventDelegate? _callback;
-    private static IntPtr _showHook;
-    private static IntPtr _moveHook;
-    private static readonly StringBuilder ClassName = new(256);
-    private static readonly StringBuilder Title = new(256);
+    private static readonly ILog Logger = LogManager.GetLogger(typeof(NativeOsdSuppressor));
+    private static readonly User32.EnumWindowsProc EnumProc = OnEnumWindow;
+    private static CancellationTokenSource? _cts;
+    private static int _bldUtilityPid;
+    private static int _bldServicePid;
+    private static long _pidStamp;
+    private static int _logged;
 
     public static void Start()
     {
-        if (_showHook != IntPtr.Zero) return;
-        _callback = OnWinEvent;
-        uint flags = User32.WINEVENT_OUTOFCONTEXT | User32.WINEVENT_SKIPOWNPROCESS;
-        _showHook = User32.SetWinEventHook(
-            User32.EVENT_OBJECT_SHOW, User32.EVENT_OBJECT_SHOW, IntPtr.Zero, _callback, 0, 0, flags);
-        _moveHook = User32.SetWinEventHook(
-            User32.EVENT_OBJECT_LOCATIONCHANGE, User32.EVENT_OBJECT_LOCATIONCHANGE,
-            IntPtr.Zero, _callback, 0, 0, flags);
+        if (_cts != null) return;
+        _cts = new CancellationTokenSource();
+        var token = _cts.Token;
+        Task.Factory.StartNew(() => Loop(token), token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
     }
 
     public static void Stop()
     {
-        if (_showHook != IntPtr.Zero) User32.UnhookWinEvent(_showHook);
-        if (_moveHook != IntPtr.Zero) User32.UnhookWinEvent(_moveHook);
-        _showHook = IntPtr.Zero;
-        _moveHook = IntPtr.Zero;
+        try { _cts?.Cancel(); }
+        catch { /* ignore */ }
+        _cts = null;
     }
 
-    private static void OnWinEvent(
-        IntPtr hook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint thread, uint time)
+    private static void Loop(CancellationToken token)
     {
-        if (hwnd == IntPtr.Zero || idObject != 0 || idChild != 0) return;
-        try
+        while (!token.IsCancellationRequested)
         {
-            var osd = Bridge.Instance.Config.Osd;
-            if (!osd.Enabled) return;
-
-            Title.Clear();
-            User32.GetWindowText(hwnd, Title, Title.Capacity);
-            if (Title.ToString() == "FloatingNativeWindow")
+            try
             {
-                User32.ShowWindow(hwnd, User32.SW_HIDE);
-                return;
+                var osd = Bridge.Instance.Config.Osd;
+                if (osd.Enabled || osd.SuppressNativeVolumeOsd)
+                {
+                    RefreshPids();
+                    User32.EnumWindows(EnumProc, IntPtr.Zero);
+                }
+            }
+            catch (Exception ex)
+            {
+                if (Interlocked.Exchange(ref _logged, 1) == 0)
+                    Logger.Warn($"屏蔽旧 OSD 轮询异常: {ex.Message}");
             }
 
-            if (!osd.SuppressNativeVolumeOsd) return;
-            ClassName.Clear();
-            User32.GetClassName(hwnd, ClassName, ClassName.Capacity);
-            var cls = ClassName.ToString();
-            if (cls is not ("XamlExplorerHostIslandWindow" or "Windows.UI.Core.CoreWindow" or "NativeHWNDHost"))
-                return;
-            if (!IsSmallFlyout(hwnd) || !IsShellFlyoutProcess(hwnd)) return;
-            User32.ShowWindow(hwnd, User32.SW_HIDE);
+            token.WaitHandle.WaitOne(80);
+        }
+    }
+
+    private static void RefreshPids()
+    {
+        long now = Environment.TickCount64;
+        if (now - _pidStamp < 2000) return;
+        _pidStamp = now;
+        _bldUtilityPid = FirstPid("BLDFnHotkeyUtility");
+        _bldServicePid = FirstPid("BLDHotKeyService");
+    }
+
+    private static int FirstPid(string name)
+    {
+        try
+        {
+            var list = Process.GetProcessesByName(name);
+            return list.Length > 0 ? list[0].Id : 0;
         }
         catch
         {
-            // 钩子里不能抛
+            return 0;
+        }
+    }
+
+    private static bool OnEnumWindow(IntPtr hwnd, IntPtr lParam)
+    {
+        if (!User32.IsWindowVisible(hwnd)) return true;
+        User32.GetWindowThreadProcessId(hwnd, out uint pid);
+        if (pid == 0) return true;
+
+        bool factory = (int)pid == _bldUtilityPid || (int)pid == _bldServicePid;
+        if (factory && IsFactoryOsd(hwnd))
+        {
+            Hide(hwnd);
+            return true;
+        }
+
+        try
+        {
+            if (!Bridge.Instance.Config.Osd.SuppressNativeVolumeOsd) return true;
+        }
+        catch
+        {
+            return true;
+        }
+
+        if (!IsShellProcess((int)pid)) return true;
+        if (!IsShellFlyoutClass(hwnd) || !IsSmallFlyout(hwnd)) return true;
+        Hide(hwnd);
+        return true;
+    }
+
+    private static bool IsFactoryOsd(IntPtr hwnd)
+    {
+        var title = ReadText(hwnd, windowTitle: true);
+        if (title.Contains("FloatingNativeWindow", StringComparison.Ordinal))
+            return true;
+        var cls = ReadText(hwnd, windowTitle: false);
+        return cls.StartsWith("WindowsForms10.Window", StringComparison.Ordinal) && IsSmallFlyout(hwnd);
+    }
+
+    private static bool IsShellFlyoutClass(IntPtr hwnd)
+    {
+        var cls = ReadText(hwnd, windowTitle: false);
+        return cls is "XamlExplorerHostIslandWindow" or "Windows.UI.Core.CoreWindow" or "NativeHWNDHost";
+    }
+
+    private static bool IsShellProcess(int pid)
+    {
+        try
+        {
+            var name = Process.GetProcessById(pid).ProcessName;
+            return name.Equals("ShellExperienceHost", StringComparison.OrdinalIgnoreCase)
+                   || name.Equals("ShellHost", StringComparison.OrdinalIgnoreCase)
+                   || name.Equals("explorer", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
         }
     }
 
@@ -75,22 +144,21 @@ internal static class NativeOsdSuppressor
         if (!User32.GetWindowRect(hwnd, out var rect)) return false;
         int w = rect.Right - rect.Left;
         int h = rect.Bottom - rect.Top;
-        return w is >= 48 and <= 640 && h is >= 36 and <= 420;
+        return w is >= 40 and <= 720 && h is >= 24 and <= 640;
     }
 
-    private static bool IsShellFlyoutProcess(IntPtr hwnd)
+    private static void Hide(IntPtr hwnd)
     {
-        User32.GetWindowThreadProcessId(hwnd, out uint pid);
-        if (pid == 0) return false;
-        try
-        {
-            var name = Process.GetProcessById((int)pid).ProcessName;
-            return name.Equals("ShellExperienceHost", StringComparison.OrdinalIgnoreCase)
-                   || name.Equals("explorer", StringComparison.OrdinalIgnoreCase);
-        }
-        catch
-        {
-            return false;
-        }
+        User32.ShowWindow(hwnd, User32.SW_HIDE);
+        User32.SetWindowPos(hwnd, IntPtr.Zero, -32000, -32000, 0, 0,
+            User32.SWP_NOSIZE | User32.SWP_NOACTIVATE);
+    }
+
+    private static string ReadText(IntPtr hwnd, bool windowTitle)
+    {
+        var sb = new StringBuilder(256);
+        if (windowTitle) User32.GetWindowText(hwnd, sb, sb.Capacity);
+        else User32.GetClassName(hwnd, sb, sb.Capacity);
+        return sb.ToString();
     }
 }
