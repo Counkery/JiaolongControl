@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
 using JiaoLongControl.Server.Interop;
 using log4net;
@@ -7,19 +9,35 @@ namespace JiaoLongControl.Server.Core.Native;
 
 /// <summary>
 /// 藏起和自绘 OSD 叠在一起的旧提示。
-/// 厂家 OSD 是 BLDFnHotkeyUtility 的 FloatingNativeWindow，弹出时不一定发 EVENT_OBJECT_SHOW，
-/// 所以按进程轮询并移出屏幕。Windows 音量/亮度/媒体浮层在「屏蔽原生浮层」打开时同样处理。
-/// 不结束厂家热键进程，Fn 仍由 EC / WMI 生效。
+/// 厂家 BLDFnHotkeyUtility 跑在 System 完整性，管理员进程无法对其窗口 ShowWindow/SetWindowPos
+/// （UIPI），因此改为挂起该 OSD 进程；Fn / EC 仍由 BLDHotKeyService 处理。
+/// Windows 音量/亮度/媒体浮层在「屏蔽原生浮层」打开时继续用藏窗处理。
 /// </summary>
 internal static class NativeOsdSuppressor
 {
     private static readonly ILog Logger = LogManager.GetLogger(typeof(NativeOsdSuppressor));
     private static readonly User32.EnumWindowsProc EnumProc = OnEnumWindow;
+    private static readonly ConcurrentDictionary<int, byte> SuspendedUtilityPids = new();
+
     private static CancellationTokenSource? _cts;
-    private static int _bldUtilityPid;
-    private static int _bldServicePid;
-    private static long _pidStamp;
     private static int _logged;
+    private static int _suspendLogged;
+
+    private const uint ProcessSuspendResume = 0x0800;
+    private const uint ProcessQueryLimited = 0x1000;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenProcess(uint desiredAccess, bool inheritHandle, int processId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CloseHandle(IntPtr handle);
+
+    [DllImport("ntdll.dll")]
+    private static extern int NtSuspendProcess(IntPtr processHandle);
+
+    [DllImport("ntdll.dll")]
+    private static extern int NtResumeProcess(IntPtr processHandle);
 
     public static void Start()
     {
@@ -34,6 +52,7 @@ internal static class NativeOsdSuppressor
         try { _cts?.Cancel(); }
         catch { /* ignore */ }
         _cts = null;
+        ResumeAllUtilities();
     }
 
     private static void Loop(CancellationToken token)
@@ -43,11 +62,14 @@ internal static class NativeOsdSuppressor
             try
             {
                 var osd = Bridge.Instance.Config.Osd;
-                if (osd.Enabled || osd.SuppressNativeVolumeOsd)
-                {
-                    RefreshPids();
+                bool suppressFactory = osd.Enabled || osd.SuppressNativeVolumeOsd;
+                if (suppressFactory)
+                    SuppressFactoryOsdProcess();
+                else
+                    ResumeAllUtilities();
+
+                if (osd.SuppressNativeVolumeOsd)
                     User32.EnumWindows(EnumProc, IntPtr.Zero);
-                }
             }
             catch (Exception ex)
             {
@@ -57,53 +79,132 @@ internal static class NativeOsdSuppressor
 
             token.WaitHandle.WaitOne(80);
         }
+
+        ResumeAllUtilities();
     }
 
-    private static void RefreshPids()
+    /// <summary>
+    /// 厂家 OSD 进程在 System IL，藏窗会被 UIPI 拒绝；挂起进程即可阻止 Caps/Fn 旧 OSD。
+    /// 若窗口已显示，先结束进程清掉残影，服务约数秒后会拉起新实例再挂起。
+    /// </summary>
+    private static void SuppressFactoryOsdProcess()
     {
-        long now = Environment.TickCount64;
-        if (now - _pidStamp < 2000) return;
-        _pidStamp = now;
-        _bldUtilityPid = FirstPid("BLDFnHotkeyUtility");
-        _bldServicePid = FirstPid("BLDHotKeyService");
+        Process[] list;
+        try { list = Process.GetProcessesByName("BLDFnHotkeyUtility"); }
+        catch { return; }
+
+        if (list.Length == 0)
+        {
+            PruneDeadSuspendedPids();
+            return;
+        }
+
+        foreach (var p in list)
+        {
+            try
+            {
+                if (HasVisibleFactoryOsd(p.Id))
+                {
+                    p.Kill();
+                    SuspendedUtilityPids.TryRemove(p.Id, out _);
+                    if (Interlocked.Exchange(ref _suspendLogged, 1) == 0)
+                        Logger.Info("厂家 OSD 窗口已显示且无法跨完整性藏窗，已结束 BLDFnHotkeyUtility 以清除残影");
+                    continue;
+                }
+
+                SuspendUtility(p.Id);
+            }
+            catch (Exception ex)
+            {
+                if (Interlocked.Exchange(ref _logged, 1) == 0)
+                    Logger.Warn($"抑制厂家 OSD 进程失败: {ex.Message}");
+            }
+            finally
+            {
+                try { p.Dispose(); } catch { /* ignore */ }
+            }
+        }
+
+        PruneDeadSuspendedPids();
     }
 
-    private static int FirstPid(string name)
+    private static void SuspendUtility(int pid)
     {
+        if (pid <= 0 || SuspendedUtilityPids.ContainsKey(pid)) return;
+
+        IntPtr handle = OpenProcess(ProcessSuspendResume | ProcessQueryLimited, false, pid);
+        if (handle == IntPtr.Zero) return;
         try
         {
-            var list = Process.GetProcessesByName(name);
-            return list.Length > 0 ? list[0].Id : 0;
+            int status = NtSuspendProcess(handle);
+            if (status == 0)
+            {
+                SuspendedUtilityPids[pid] = 0;
+                if (Interlocked.Exchange(ref _suspendLogged, 1) == 0)
+                    Logger.Info($"已挂起厂家 OSD 进程 BLDFnHotkeyUtility (pid={pid})，避免与自绘 OSD 叠层");
+            }
         }
-        catch
+        finally
         {
-            return 0;
+            CloseHandle(handle);
         }
+    }
+
+    private static void ResumeAllUtilities()
+    {
+        foreach (var pid in SuspendedUtilityPids.Keys)
+        {
+            IntPtr handle = OpenProcess(ProcessSuspendResume | ProcessQueryLimited, false, pid);
+            if (handle == IntPtr.Zero)
+            {
+                SuspendedUtilityPids.TryRemove(pid, out _);
+                continue;
+            }
+
+            try { NtResumeProcess(handle); }
+            finally
+            {
+                CloseHandle(handle);
+                SuspendedUtilityPids.TryRemove(pid, out _);
+            }
+        }
+    }
+
+    private static void PruneDeadSuspendedPids()
+    {
+        foreach (var pid in SuspendedUtilityPids.Keys)
+        {
+            try
+            {
+                using var p = Process.GetProcessById(pid);
+                if (p.HasExited) SuspendedUtilityPids.TryRemove(pid, out _);
+            }
+            catch
+            {
+                SuspendedUtilityPids.TryRemove(pid, out _);
+            }
+        }
+    }
+
+    private static bool HasVisibleFactoryOsd(int pid)
+    {
+        bool found = false;
+        User32.EnumWindows((hwnd, _) =>
+        {
+            User32.GetWindowThreadProcessId(hwnd, out uint windowPid);
+            if ((int)windowPid != pid || !User32.IsWindowVisible(hwnd)) return true;
+            if (!IsFactoryOsd(hwnd)) return true;
+            found = true;
+            return false;
+        }, IntPtr.Zero);
+        return found;
     }
 
     private static bool OnEnumWindow(IntPtr hwnd, IntPtr lParam)
     {
         if (!User32.IsWindowVisible(hwnd)) return true;
         User32.GetWindowThreadProcessId(hwnd, out uint pid);
-        if (pid == 0) return true;
-
-        bool factory = (int)pid == _bldUtilityPid || (int)pid == _bldServicePid;
-        if (factory && IsFactoryOsd(hwnd))
-        {
-            Hide(hwnd);
-            return true;
-        }
-
-        try
-        {
-            if (!Bridge.Instance.Config.Osd.SuppressNativeVolumeOsd) return true;
-        }
-        catch
-        {
-            return true;
-        }
-
-        if (!IsShellProcess((int)pid)) return true;
+        if (pid == 0 || !IsShellProcess((int)pid)) return true;
         if (!IsShellFlyoutClass(hwnd) || !IsSmallFlyout(hwnd)) return true;
         Hide(hwnd);
         return true;

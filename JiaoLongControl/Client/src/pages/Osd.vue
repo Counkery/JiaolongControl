@@ -165,7 +165,7 @@ onMounted(() => {
           />
           <SettingToggle
             config-path="Osd.SuppressNativeVolumeOsd"
-            description="开启后不再弹出 Windows 自带的音量、亮度、媒体浮层；音量键由本程序调整并显示自绘 OSD。性能模式、键盘背光、Fn 锁、触摸板这些厂家旧 OSD（BLDFnHotkeyUtility）在「启用 OSD」打开时也会被藏起，Fn 功能仍有效。关闭本项后，Windows 浮层恢复；关掉「启用 OSD」后，厂家旧 OSD 也会恢复。"
+            description="开启后不再弹出 Windows 自带的音量、亮度、媒体浮层；音量键由本程序调整并显示自绘 OSD。厂家旧 OSD（BLDFnHotkeyUtility，含 Caps 等）跑在系统完整性，无法直接藏窗，因此在「启用 OSD」或本项打开时会挂起该 OSD 进程；Fn / EC 仍由 BLDHotKeyService 处理。关闭本项且关掉「启用 OSD」后，厂家进程恢复。"
             title="屏蔽系统与厂家旧 OSD"
           />
           <SettingToggle

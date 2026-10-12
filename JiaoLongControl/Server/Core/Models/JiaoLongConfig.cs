@@ -413,7 +413,7 @@ public class OsdSection
     [ConfigComment("显示项目: 媒体播放提示 (系统有程序开始播放音乐或切歌时显示曲名与歌手)")]
     public bool ShowMedia { get; set; } = true;
 
-    [ConfigComment("屏蔽 Windows 音量/亮度/媒体浮层 (接管音量键)。启用 OSD 时另会藏起厂家 BLDFnHotkeyUtility 旧 OSD")]
+    [ConfigComment("屏蔽 Windows 音量/亮度/媒体浮层 (接管音量键)。启用 OSD 时另会挂起厂家 BLDFnHotkeyUtility（System 完整性无法藏窗）")]
     public bool SuppressNativeVolumeOsd { get; set; } = false;
 
     [ConfigComment("EC 状态轮询间隔 (ms, 事件通道不可用时的兜底)")]
