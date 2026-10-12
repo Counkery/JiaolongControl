@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -38,6 +39,7 @@ namespace JiaoLongControl.Server
         private const int ExitMs = 160;
 
         private static readonly ILog Logger = LogManager.GetLogger(typeof(OsdWindow));
+        private static readonly ConcurrentDictionary<string, ImageSource?> IconCache = new();
         private readonly DispatcherTimer _cursorTimer;
 
         private readonly DispatcherTimer _hideTimer;
@@ -214,26 +216,28 @@ namespace JiaoLongControl.Server
                 }
 
                 int marqueeDelayMs;
-                if (!IsVisible)
+                if (!IsVisible || wasExiting)
                 {
-                    // 从隐藏状态首次显示: 播放完整进场动画
-                    Show();
+                    // 隐藏态 / 退场中再次触发: 统一走同一套进场动画, 避免「恢复」与「首次」两套节奏时快时慢
+                    if (!IsVisible) Show();
                     ReassertTopmost();
                     PlayEntry();
-                    // 胶囊宽度由入场动画从圆形展开到满宽, 必须等展开结束再测可视区
-                    marqueeDelayMs = (int)_animMs + 150;
-                }
-                else if (wasExiting)
-                {
-                    // 退场动画进行中再次触发: 从当前形态快速恢复驻留
-                    ReassertTopmost();
-                    RecoverFromExit();
-                    marqueeDelayMs = 160; // 恢复动画约 120ms
+                    marqueeDelayMs = (int)_animMs + 40;
                 }
                 else
                 {
                     // 已处于驻留状态: 仅刷新内容与计时, 不重播进场动画 (避免闪烁)
                     ReassertTopmost();
+                    // 种类切换时宽度可能从短胶囊变满宽, 立刻钉到目标, 不残留上一轮动画
+                    Pill.BeginAnimation(WidthProperty, null);
+                    Pill.BeginAnimation(HeightProperty, null);
+                    Pill.Width = _pillW * _uiScale;
+                    Pill.Height = PillH * _uiScale;
+                    Pill.Opacity = Math.Clamp(cfg.Opacity, 30, 100) / 100.0;
+                    IconBox.Opacity = 1;
+                    TitleText.Opacity = 1;
+                    SubtitleText.Opacity = 1;
+                    BarPanel.Opacity = 1;
                     marqueeDelayMs = 0;
                 }
 
@@ -967,6 +971,9 @@ namespace JiaoLongControl.Server
             }
         }
 
+        /// <summary>启动时预解码常用 OSD 图标, 避免第一次弹出才卡顿。</summary>
+        public static void WarmIcon(string path) => TryLoadIconImage(path);
+
         /// <summary>
         /// 加载 OsdItem 指定的 PNG 图标 (支持 pack URI 与磁盘路径), 失败返回 null 回退字形。
         /// 素材为黑色剪影 (部分导出时整体半透明), 读取后做透明度归一化 (最高不透明度拉满,
@@ -975,6 +982,7 @@ namespace JiaoLongControl.Server
         private static ImageSource? TryLoadIconImage(string? path)
         {
             if (string.IsNullOrWhiteSpace(path)) return null;
+            if (IconCache.TryGetValue(path, out var cached)) return cached;
             try
             {
                 var uri = path.StartsWith("pack:", StringComparison.OrdinalIgnoreCase)
@@ -1008,11 +1016,13 @@ namespace JiaoLongControl.Server
                 }
 
                 normalized.Freeze(); // 跨线程安全, 且免去每帧命中测试开销
+                IconCache[path] = normalized;
                 return normalized;
             }
             catch (Exception ex)
             {
                 Logger.Warn($"OSD 图标图片加载失败 ({path}): {ex.Message}");
+                IconCache[path] = null;
                 return null;
             }
         }

@@ -155,6 +155,8 @@ namespace JiaoLongControl.Server.Core.Controllers
                 if (_hook == IntPtr.Zero)
                     Logger.Warn($"OSD 键盘钩子安装失败 (Win32Error={Marshal.GetLastWin32Error()})");
                 NativeOsdSuppressor.Start();
+                // 预创建 OSD 窗口, 避免首次弹出时再走 WPF 创建/布局导致「第一次特别慢」
+                EnsureWindow();
             }
             catch (Exception ex)
             {
@@ -522,7 +524,7 @@ namespace JiaoLongControl.Server.Core.Controllers
             var p = percent;
             var dispatcher = Application.Current?.Dispatcher;
             if (dispatcher == null) return;
-            dispatcher.BeginInvoke(() => ShowScreenBrightnessOsd(p, force: false));
+            dispatcher.BeginInvoke(DispatcherPriority.Send, () => ShowScreenBrightnessOsd(p, force: false));
         }
 
         /// <summary>
@@ -1294,25 +1296,32 @@ namespace JiaoLongControl.Server.Core.Controllers
             });
         }
 
+        /// <summary>防抖键 → 窗口 CurrentKind, 用于判断是否已在驻留快刷。</summary>
+        private static string DebounceKind(string key) => key switch
+        {
+            "capslock" or "numlock" or "scrolllock" => "lock",
+            "volume" => "volume",
+            "display" => "display",
+            _ => key,
+        };
+
         private void DebounceShow(string key, Action action)
         {
             var dispatcher = Application.Current?.Dispatcher;
             if (dispatcher == null) return;
-            dispatcher.BeginInvoke(() =>
+            // Send: 尽量贴着输入/事件线程投递, 减少「有时慢一截」的调度抖动
+            dispatcher.BeginInvoke(DispatcherPriority.Send, () =>
             {
                 try
                 {
-                    // 同类 OSD 已驻留: 走节流快刷 (窗口内不重置计时, 到点读最新状态),
-                    // 连续滚动/连按音量键时数值即时跟进, 不必等停止后再刷新;
-                    // 否则按完整防抖等首次显示。锁定键的 kind 为 lock, 与
-                    // capslock/numlock/scrolllock 键名不匹配, 自动维持原防抖行为
-                    var live = _window?.IsDwellingKind(key) == true;
+                    var kind = DebounceKind(key);
+                    var live = _window?.IsDwellingKind(kind) == true;
+
                     if (_pending.TryGetValue(key, out var pending))
                     {
-                        if (pending.Live || live) return; // 快刷窗口进行中: 合并本次按键
-                        pending.Timer.Stop();
+                        // 只更新待执行动作, 不重置计时 (前缘触发):
+                        // 旧逻辑每次按键 Restart 会把首次弹出拖成「松手才出」, 体感时快时慢
                         pending.Action = action;
-                        pending.Timer.Start();
                         return;
                     }
 
@@ -1337,23 +1346,37 @@ namespace JiaoLongControl.Server.Core.Controllers
             });
         }
 
+        private void EnsureWindow()
+        {
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null) return;
+            void create()
+            {
+                if (_window != null) return;
+                _window = new OsdWindow();
+                _window.VolumeSelected += OnVolumeSelected;
+                _window.MuteToggled += OnMuteToggled;
+                _window.BrightnessSelected += OnBrightnessSelected;
+                _window.MediaCommand += OnMediaCommand;
+                // 预热锁定/触摸板图标, 避免首次 Caps 才解码 PNG
+                foreach (var name in new[] { "AllCaps.png", "AllLowercase.png", "Lock.png", "Unlock.png", "TouchPad.png" })
+                    OsdWindow.WarmIcon(IconPackBase + name);
+            }
+
+            if (dispatcher.CheckAccess()) create();
+            else dispatcher.Invoke(DispatcherPriority.Send, create);
+        }
+
         private void ShowOnWindow(OsdItem item, OsdSection cfg)
         {
             var dispatcher = Application.Current?.Dispatcher;
             if (dispatcher == null) return;
-            dispatcher.BeginInvoke(() =>
+            dispatcher.BeginInvoke(DispatcherPriority.Send, () =>
             {
                 try
                 {
-                    if (_window == null)
-                    {
-                        _window = new OsdWindow();
-                        _window.VolumeSelected += OnVolumeSelected;
-                        _window.MuteToggled += OnMuteToggled;
-                        _window.BrightnessSelected += OnBrightnessSelected;
-                        _window.MediaCommand += OnMediaCommand;
-                    }
-                    _window.ShowOsd(item, cfg, UiTheme.IsLight(Bridge.Instance.Config.App.Theme));
+                    EnsureWindow();
+                    _window!.ShowOsd(item, cfg, UiTheme.IsLight(Bridge.Instance.Config.App.Theme));
                 }
                 catch (Exception ex)
                 {
