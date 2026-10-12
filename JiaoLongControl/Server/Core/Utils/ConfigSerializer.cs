@@ -39,6 +39,8 @@ public static class ConfigSerializer
     private static readonly Version OsdLayoutDefaultsVersion = new("10.19.61");
     // 10.19.61 曾把 Version 先写成新号导致 CustomY=8 未迁到 96，此版本补迁。
     private static readonly Version OsdCustomY96Version = new("10.19.62");
+    // 更快的出入场与轮询默认 (动画编排亦改为贴近原生)。
+    private static readonly Version OsdSnappyVersion = new("10.19.65");
 
     public static string ConfigDir { get; set; } = Path.Combine(AppContext.BaseDirectory, "config");
     public static string ConfigPath => Path.Combine(ConfigDir, FileName);
@@ -194,6 +196,16 @@ public static class ConfigSerializer
         {
             if (LowConfig.Osd.CustomY == 8)
                 LowConfig.Osd.CustomY = 96;
+        }
+
+        // 升级到 10.19.65+：出入场/轮询收到更快默认；手调过的保留。
+        if (!Version.TryParse(LowConfig.Version, out oldVersion) || oldVersion < OsdSnappyVersion)
+        {
+            var osd = LowConfig.Osd;
+            if (osd.AnimationMs is 200 or 480 or 400)
+                osd.AnimationMs = 120;
+            if (osd.PollIntervalMs is 500 or 1000 or 800)
+                osd.PollIntervalMs = 200;
         }
 
         // 默认无损迁移

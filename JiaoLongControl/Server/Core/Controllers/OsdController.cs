@@ -24,13 +24,11 @@ namespace JiaoLongControl.Server.Core.Controllers
     [ClassInterface(ClassInterfaceType.AutoDual)]
     public class OsdController : IDisposable
     {
-        // 连续按键 (含长按重复) 防抖: 最后一次按键后再显示, 让系统先完成音量/锁定状态变更
-        private const int DebounceDelayMs = 120;
+        // 连续按键防抖: 钩子早于系统改状态, 留极少时间让 Caps/音量生效; 过长会明显慢于原生 OSD
+        private const int DebounceDelayMs = 36;
 
-        // 同类 OSD 已驻留时的原位快刷节流窗口: 连续滚动/连按音量键时数值即时跟上,
-        // 窗口内合并重复按键不重置计时, 到点读取当时真实状态 (低级钩子在系统处理
-        // 按键之前触发, 仍留少量时间给系统完成音量变更)
-        private const int LiveRefreshMs = 40;
+        // 同类 OSD 已驻留时的原位快刷节流 (连按音量/亮度时数值跟上)
+        private const int LiveRefreshMs = 16;
 
         // 强调色 = 工具箱现有主题色板
         private const string AccentVolume = "#3B82F6";      // 蓝 (信息)
@@ -246,7 +244,7 @@ namespace JiaoLongControl.Server.Core.Controllers
                         DetectCapsLock();
                     }
 
-                    token.WaitHandle.WaitOne(Math.Clamp(cfg.PollIntervalMs, 500, 5000));
+                    token.WaitHandle.WaitOne(Math.Clamp(cfg.PollIntervalMs, 100, 5000));
                 }
                 catch (OperationCanceledException)
                 {
@@ -474,8 +472,8 @@ namespace JiaoLongControl.Server.Core.Controllers
                         {
                             var cfg = Bridge.Instance.Config.Osd;
                             int waitMs = DisplayBrightness.IsEventWatching
-                                ? Math.Clamp(cfg.PollIntervalMs, 500, 5000)
-                                : 50;
+                                ? Math.Clamp(cfg.PollIntervalMs, 100, 5000)
+                                : 40;
                             if (cfg.Enabled && cfg.ShowScreenBrightness)
                                 DetectScreenBrightness();
                             token.WaitHandle.WaitOne(waitMs);

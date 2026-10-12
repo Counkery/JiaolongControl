@@ -34,8 +34,8 @@ namespace JiaoLongControl.Server
         // 当前胶囊目标宽度 (按 Kind 在 ShowOsd 时选定)
         private double _pillW = PillFullW;
 
-        // 退场基准编排总时长: 实际时长 = 显示时长, 各关键帧按 显示时长/620 等比缩放
-        private const int ExitMs = 620;
+        // 退场基准编排总时长 (与入场同量级); 实际按 AnimationMs 等比缩放
+        private const int ExitMs = 160;
 
         private static readonly ILog Logger = LogManager.GetLogger(typeof(OsdWindow));
         private readonly DispatcherTimer _cursorTimer;
@@ -167,7 +167,7 @@ namespace JiaoLongControl.Server
                 _exitTimer?.Stop();
                 var wasExiting = _exiting;
                 _exiting = false;
-                _animMs = Math.Clamp(cfg.AnimationMs, 200, 5000);
+                _animMs = Math.Clamp(cfg.AnimationMs, 80, 5000);
 
                 ApplyTheme(lightTheme, item.AccentHex, Math.Clamp(cfg.Opacity, 30, 100) / 100.0);
 
@@ -228,7 +228,7 @@ namespace JiaoLongControl.Server
                     // 退场动画进行中再次触发: 从当前形态快速恢复驻留
                     ReassertTopmost();
                     RecoverFromExit();
-                    marqueeDelayMs = 350; // 恢复动画约 200ms
+                    marqueeDelayMs = 160; // 恢复动画约 120ms
                 }
                 else
                 {
@@ -381,38 +381,34 @@ namespace JiaoLongControl.Server
         {
             ResetVisual();
             var easeOut = new CubicEase { EasingMode = EasingMode.EaseOut };
-            // 基准编排总时长 480ms, 整体等比拉伸到显示时长
-            int D(int baseMs) => Math.Max(1, (int)Math.Round(baseMs * _animMs / 480.0));
+            // 基准编排 160ms (贴近 Windows 原生浮层), 整体等比拉伸到配置的 AnimationMs
+            int D(int baseMs) => Math.Max(1, (int)Math.Round(baseMs * _animMs / 160.0));
 
-            // 1. 光晕浮现
-            Animate(Halo, OpacityProperty, 0, 0.9, D(200), 0, easeOut, completed: BeginBreathing);
-            Animate(HaloScale, ScaleTransform.ScaleXProperty, 0.6, 1.0, D(220), 0, easeOut);
-            Animate(HaloScale, ScaleTransform.ScaleYProperty, 0.6, 1.0, D(220), 0, easeOut);
+            // 1. 光晕快速浮现
+            Animate(Halo, OpacityProperty, 0, 0.85, D(100), 0, easeOut, completed: BeginBreathing);
+            Animate(HaloScale, ScaleTransform.ScaleXProperty, 0.85, 1.0, D(120), 0, easeOut);
+            Animate(HaloScale, ScaleTransform.ScaleYProperty, 0.85, 1.0, D(120), 0, easeOut);
 
-            // 2. 一个圆向两边水平展开 (与退场对称: 先从收拢的小圆长成正圆, 再展开成胶囊;
-            //    与退场同理动画 Width 而非缩放变换 — 非等比缩放会把圆角拉扁, 无法保持正圆)
-            // 宽高在前段 D(160) 同速等比生长 (0.78→1.0, 严格保持正圆不变形),
-            // 之后宽度单独向两边展开横跨到满时长 (D(480) 即 _animMs),
-            // EaseInOut + 末端轻过冲: 动作均匀铺满全程
-            var circleW = PillH * _uiScale;
-            var back = new BackEase { Amplitude = 0.25, EasingMode = EasingMode.EaseInOut };
+            // 2. 从接近满宽的矮胶囊快速展开 (不再从极小圆长起, 减少「慢半拍」感)
+            //    宽度动画用 Width 而非非等比缩放, 避免圆角被拉扁
+            var startW = Math.Max(PillH * _uiScale, _pillW * _uiScale * 0.55);
+            var fullW = _pillW * _uiScale;
+            var fullH = PillH * _uiScale;
 
             var widthAnim = new DoubleAnimationUsingKeyFrames();
-            widthAnim.KeyFrames.Add(new EasingDoubleKeyFrame(circleW * 0.78, TimeSpan.Zero));
-            widthAnim.KeyFrames.Add(new EasingDoubleKeyFrame(circleW, TimeSpan.FromMilliseconds(D(160)), easeOut));
-            widthAnim.KeyFrames.Add(new EasingDoubleKeyFrame(_pillW * _uiScale, TimeSpan.FromMilliseconds(D(480)), back));
+            widthAnim.KeyFrames.Add(new EasingDoubleKeyFrame(startW, TimeSpan.Zero));
+            widthAnim.KeyFrames.Add(new EasingDoubleKeyFrame(fullW, TimeSpan.FromMilliseconds(D(160)), easeOut));
             Pill.BeginAnimation(WidthProperty, widthAnim);
 
             var heightAnim = new DoubleAnimationUsingKeyFrames();
-            heightAnim.KeyFrames.Add(new EasingDoubleKeyFrame(circleW * 0.78, TimeSpan.Zero));
-            heightAnim.KeyFrames.Add(new EasingDoubleKeyFrame(circleW, TimeSpan.FromMilliseconds(D(160)), easeOut));
+            heightAnim.KeyFrames.Add(new EasingDoubleKeyFrame(fullH * 0.92, TimeSpan.Zero));
+            heightAnim.KeyFrames.Add(new EasingDoubleKeyFrame(fullH, TimeSpan.FromMilliseconds(D(100)), easeOut));
             Pill.BeginAnimation(HeightProperty, heightAnim);
 
-            Animate(PillTranslate, TranslateTransform.YProperty, -14, 0, D(280), 0, easeOut);
-            Animate(Pill, OpacityProperty, 0, 1, D(120), 0, easeOut);
+            Animate(PillTranslate, TranslateTransform.YProperty, 8, 0, D(140), 0, easeOut);
+            Animate(Pill, OpacityProperty, 0, 1, D(70), 0, easeOut);
 
-            // 3. 内容级联渐显 (关键帧写法: 延迟期内保持透明。若仅用 BeginTime 延迟,
-            //    动画未激活的间隙会显示基准值 1, 内容会在初始小圆里提前闪现)
+            // 3. 内容几乎立刻可见 (原生浮层观感), 仅极短级联
             void FadeIn(UIElement el, int delayBase, int durBase) =>
                 el.BeginAnimation(OpacityProperty, new DoubleAnimationUsingKeyFrames
                 {
@@ -423,10 +419,10 @@ namespace JiaoLongControl.Server
                         new EasingDoubleKeyFrame(1, TimeSpan.FromMilliseconds(D(delayBase) + D(durBase)), easeOut),
                     },
                 });
-            FadeIn(IconBox, 200, 160);
-            FadeIn(TitleText, 240, 160);
-            FadeIn(SubtitleText, 280, 160);
-            FadeIn(BarPanel, 320, 160);
+            FadeIn(IconBox, 20, 80);
+            FadeIn(TitleText, 30, 80);
+            FadeIn(SubtitleText, 40, 80);
+            FadeIn(BarPanel, 45, 80);
         }
 
         private void BeginBreathing()
@@ -447,51 +443,26 @@ namespace JiaoLongControl.Server
             _exiting = true;
             StopAnimations();
             var easeIn = new CubicEase { EasingMode = EasingMode.EaseIn };
-            // 基准编排总时长 620ms (ExitMs), 整体等比拉伸到显示时长, 与入场对等
-            int D(int baseMs) => Math.Max(1, (int)Math.Round(baseMs * _animMs / 620.0));
+            // 基准编排 160ms (ExitMs), 与入场对等、快速收起
+            int D(int baseMs) => Math.Max(1, (int)Math.Round(baseMs * _animMs / 160.0));
 
-            // 1. 收起内容 (整个图标容器含 IconGlow 光晕一并隐藏; holdEnd 保持隐藏直到
-            //    窗口隐藏/被打断恢复, 否则 FillBehavior.Stop 会在动画结束后弹回可见,
-            //    收缩成圆时留下内容残影)
-            Animate(IconBox, OpacityProperty, null, 0, D(140), holdEnd: true);
-            Animate(TitleText, OpacityProperty, null, 0, D(140), holdEnd: true);
-            Animate(SubtitleText, OpacityProperty, null, 0, D(140), holdEnd: true);
-            Animate(BarPanel, OpacityProperty, null, 0, D(140), holdEnd: true);
+            // 1. 内容立刻收起 (holdEnd 避免动画结束后回弹可见)
+            Animate(IconBox, OpacityProperty, null, 0, D(50), holdEnd: true);
+            Animate(TitleText, OpacityProperty, null, 0, D(50), holdEnd: true);
+            Animate(SubtitleText, OpacityProperty, null, 0, D(50), holdEnd: true);
+            Animate(BarPanel, OpacityProperty, null, 0, D(50), holdEnd: true);
 
-            // 2. 两边向中心收缩成一个圆: 动画 Width 而非缩放变换 — 非等比缩放会把
-            //    圆角一起拉扁 (缩到 40x40 时四角是椭圆弧), 圆角固定为高度一半不动,
-            //    宽度收到与高度相等时恰为正圆; 居中对齐保证两边对称内收。
-            //    收缩动作铺满全程前段 (D(480)/D(620)), 与入场展开对等
-            var circleW = PillH * _uiScale;
+            // 2. 胶囊快速收窄并下沉淡出 (不再拖长成圆再消散)
+            var endW = Math.Max(PillH * _uiScale, _pillW * _uiScale * 0.55);
             var widthAnim = new DoubleAnimationUsingKeyFrames { FillBehavior = FillBehavior.HoldEnd };
-            widthAnim.KeyFrames.Add(new EasingDoubleKeyFrame(circleW, TimeSpan.FromMilliseconds(D(480)),
-                new CubicEase { EasingMode = EasingMode.EaseInOut }));
-            widthAnim.KeyFrames.Add(new EasingDoubleKeyFrame(circleW * 0.78, TimeSpan.FromMilliseconds(D(560))));
+            widthAnim.KeyFrames.Add(new EasingDoubleKeyFrame(endW, TimeSpan.FromMilliseconds(D(160)), easeIn));
             Pill.BeginAnimation(WidthProperty, widthAnim);
 
-            // 圆形成后与宽度同步轻微收拢, 保持正圆形态消隐
-            var heightAnim = new DoubleAnimationUsingKeyFrames { FillBehavior = FillBehavior.HoldEnd };
-            heightAnim.KeyFrames.Add(new EasingDoubleKeyFrame(circleW, TimeSpan.FromMilliseconds(D(480))));
-            heightAnim.KeyFrames.Add(new EasingDoubleKeyFrame(circleW * 0.78, TimeSpan.FromMilliseconds(D(560))));
-            Pill.BeginAnimation(HeightProperty, heightAnim);
-
-            var translateY = new DoubleAnimationUsingKeyFrames { FillBehavior = FillBehavior.HoldEnd };
-            translateY.KeyFrames.Add(new LinearDoubleKeyFrame(-4, TimeSpan.FromMilliseconds(D(140))));
-            translateY.KeyFrames.Add(new LinearDoubleKeyFrame(-4, TimeSpan.FromMilliseconds(D(460))));
-            translateY.KeyFrames.Add(new LinearDoubleKeyFrame(-10, TimeSpan.FromMilliseconds(D(560))));
-            PillTranslate.BeginAnimation(TranslateTransform.YProperty, translateY);
-
-            // 光晕先增亮再回落消散
-            var halo = new DoubleAnimationUsingKeyFrames { FillBehavior = FillBehavior.HoldEnd };
-            halo.KeyFrames.Add(new LinearDoubleKeyFrame(1.0, TimeSpan.FromMilliseconds(D(140))));
-            halo.KeyFrames.Add(new LinearDoubleKeyFrame(1.0, TimeSpan.FromMilliseconds(D(320))));
-            halo.KeyFrames.Add(new LinearDoubleKeyFrame(0.0, TimeSpan.FromMilliseconds(D(600))));
-            Halo.BeginAnimation(OpacityProperty, halo);
-            Animate(HaloScale, ScaleTransform.ScaleXProperty, null, 1.15, D(280), D(140), easeIn);
-            Animate(HaloScale, ScaleTransform.ScaleYProperty, null, 1.15, D(280), D(140), easeIn);
-
-            // 3. 圆体淡出 (圆形成后开始消隐, 与光晕消散同步收尾)
-            Animate(Pill, OpacityProperty, null, 0, D(140), D(460), easeIn, holdEnd: true);
+            Animate(PillTranslate, TranslateTransform.YProperty, null, 6, D(140), 0, easeIn);
+            Animate(Halo, OpacityProperty, null, 0, D(120), 0, easeIn, holdEnd: true);
+            Animate(HaloScale, ScaleTransform.ScaleXProperty, null, 0.9, D(120), 0, easeIn);
+            Animate(HaloScale, ScaleTransform.ScaleYProperty, null, 0.9, D(120), 0, easeIn);
+            Animate(Pill, OpacityProperty, null, 0, D(120), D(30), easeIn, holdEnd: true);
 
             // 4. 完全消失 (持有为字段, 退场被打断时可在 ShowOsd 中取消, 避免旧回调误触 Hide)
             _exitTimer?.Stop();
@@ -567,18 +538,19 @@ namespace JiaoLongControl.Server
 
             var easeOut = new CubicEase { EasingMode = EasingMode.EaseOut };
             Animate(Pill, OpacityProperty, curPillOpacity, basePillOpacity, 200, 0, easeOut);
-            Animate(Pill, WidthProperty, curWidth, _pillW * _uiScale, 200, 0, easeOut);
-            Animate(Pill, HeightProperty, curHeight, PillH * _uiScale, 200, 0, easeOut);
-            Animate(PillScale, ScaleTransform.ScaleXProperty, curScaleX, 1, 200, 0, easeOut);
-            Animate(PillScale, ScaleTransform.ScaleYProperty, curScaleY, 1, 200, 0, easeOut);
-            Animate(PillTranslate, TranslateTransform.YProperty, curY, 0, 200, 0, easeOut);
-            Animate(Halo, OpacityProperty, curHalo, 0.9, 200, 0, easeOut, completed: BeginBreathing);
-            Animate(HaloScale, ScaleTransform.ScaleXProperty, curHaloScale, 1, 200, 0, easeOut);
-            Animate(HaloScale, ScaleTransform.ScaleYProperty, curHaloScale, 1, 200, 0, easeOut);
-            Animate(IconBox, OpacityProperty, curIcon, 1, 200, 0, easeOut);
-            Animate(TitleText, OpacityProperty, curTitle, 1, 200, 0, easeOut);
-            Animate(SubtitleText, OpacityProperty, curSubtitle, 1, 200, 0, easeOut);
-            Animate(BarPanel, OpacityProperty, curBar, 1, 200, 0, easeOut);
+            const int recoverMs = 120;
+            Animate(Pill, WidthProperty, curWidth, _pillW * _uiScale, recoverMs, 0, easeOut);
+            Animate(Pill, HeightProperty, curHeight, PillH * _uiScale, recoverMs, 0, easeOut);
+            Animate(PillScale, ScaleTransform.ScaleXProperty, curScaleX, 1, recoverMs, 0, easeOut);
+            Animate(PillScale, ScaleTransform.ScaleYProperty, curScaleY, 1, recoverMs, 0, easeOut);
+            Animate(PillTranslate, TranslateTransform.YProperty, curY, 0, recoverMs, 0, easeOut);
+            Animate(Halo, OpacityProperty, curHalo, 0.85, recoverMs, 0, easeOut, completed: BeginBreathing);
+            Animate(HaloScale, ScaleTransform.ScaleXProperty, curHaloScale, 1, recoverMs, 0, easeOut);
+            Animate(HaloScale, ScaleTransform.ScaleYProperty, curHaloScale, 1, recoverMs, 0, easeOut);
+            Animate(IconBox, OpacityProperty, curIcon, 1, recoverMs, 0, easeOut);
+            Animate(TitleText, OpacityProperty, curTitle, 1, recoverMs, 0, easeOut);
+            Animate(SubtitleText, OpacityProperty, curSubtitle, 1, recoverMs, 0, easeOut);
+            Animate(BarPanel, OpacityProperty, curBar, 1, recoverMs, 0, easeOut);
         }
 
         private void StopAnimations()

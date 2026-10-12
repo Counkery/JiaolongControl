@@ -25,7 +25,7 @@ namespace JiaoLongControl.Server.Core.Services
         private const string Wql = "SELECT * FROM HID_EVENT20";
 
         /// <summary>相同事件名+值在此毫秒内只向上游投递一次。</summary>
-        public static int DebounceWindowMs { get; set; } = 250;
+        public static int DebounceWindowMs { get; set; } = 80;
 
         private static readonly ILog Logger = LogManager.GetLogger(typeof(WMIEventService));
 

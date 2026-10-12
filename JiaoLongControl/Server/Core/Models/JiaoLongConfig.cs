@@ -420,12 +420,12 @@ public class OsdSection
     public bool SuppressNativeVolumeOsd { get; set; } = false;
 
     [ConfigComment("EC 状态轮询间隔 (ms, 事件通道不可用时的兜底)")]
-    [ConfigRange(500, 5000)]
-    public int PollIntervalMs { get; set; } = 500;
+    [ConfigRange(100, 5000)]
+    public int PollIntervalMs { get; set; } = 200;
 
     [ConfigComment("出入场动画时长 (ms, 入场展开与出场收圆各占此时长)")]
-    [ConfigRange(200, 3000)]
-    public int AnimationMs { get; set; } = 200;
+    [ConfigRange(80, 3000)]
+    public int AnimationMs { get; set; } = 120;
 
     [ConfigComment("OSD 显示时长 (ms, 完全展开后的驻留时间)")]
     [ConfigRange(500, 5000)]
