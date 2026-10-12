@@ -275,7 +275,7 @@ onMounted(() => {
               <a-slider
                 v-model="osdData.AnimationMs"
                 :max="3000"
-                :min="80"
+                :min="60"
                 :step="20"
                 class="slider-purple"
                 @change="saveDebounced"

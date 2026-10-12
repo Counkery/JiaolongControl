@@ -423,9 +423,9 @@ public class OsdSection
     [ConfigRange(100, 5000)]
     public int PollIntervalMs { get; set; } = 200;
 
-    [ConfigComment("出入场动画时长 (ms, 入场展开与出场收圆各占此时长)")]
-    [ConfigRange(80, 3000)]
-    public int AnimationMs { get; set; } = 120;
+    [ConfigComment("出入场动画时长 (ms, 入场淡入与出场淡出各占此时长)")]
+    [ConfigRange(60, 3000)]
+    public int AnimationMs { get; set; } = 80;
 
     [ConfigComment("OSD 显示时长 (ms, 完全展开后的驻留时间)")]
     [ConfigRange(500, 5000)]

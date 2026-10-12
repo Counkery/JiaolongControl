@@ -41,6 +41,8 @@ public static class ConfigSerializer
     private static readonly Version OsdCustomY96Version = new("10.19.62");
     // 更快的出入场与轮询默认 (动画编排亦改为贴近原生)。
     private static readonly Version OsdSnappyVersion = new("10.19.65");
+    // 出入场改为固定时长纯淡入淡出, 默认更干脆。
+    private static readonly Version OsdInstantVersion = new("10.19.67");
 
     public static string ConfigDir { get; set; } = Path.Combine(AppContext.BaseDirectory, "config");
     public static string ConfigPath => Path.Combine(ConfigDir, FileName);
@@ -206,6 +208,14 @@ public static class ConfigSerializer
                 osd.AnimationMs = 120;
             if (osd.PollIntervalMs is 500 or 1000 or 800)
                 osd.PollIntervalMs = 200;
+        }
+
+        // 升级到 10.19.67+：出入场收到更干脆默认；手调过的保留。PollIntervalMs 已是 200 则不动。
+        if (!Version.TryParse(LowConfig.Version, out oldVersion) || oldVersion < OsdInstantVersion)
+        {
+            var osd = LowConfig.Osd;
+            if (osd.AnimationMs is 120 or 200 or 480 or 400)
+                osd.AnimationMs = 80;
         }
 
         // 默认无损迁移

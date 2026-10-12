@@ -14,7 +14,8 @@ namespace JiaoLongControl.Server.Core.Controllers
 {
     /// <summary>
     /// OSD 屏显控制器: 三条触发链路。
-    /// 1) 全局低级键盘钩子监听音量/锁定键 (不吞键), 防抖后读取真实系统状态;
+    /// 1) 全局低级键盘钩子监听音量/锁定键: 锁定键在 KEYUP 后立即弹 OSD (状态已落定);
+    ///    音量在 KEYDOWN/吞键路径立即弹 (无 DispatcherTimer 防抖);
     /// 2) 官方 HID_EVENT20 WMI 事件通道 —— 原生 Fn 热键 (性能模式/背光/Fn锁/触摸板锁/锁定键) 在 EC 层直接生效,
     ///    事件到达后复用检测逻辑读取真实状态;
     /// 3) 事件通道订阅失败时退回 EC 状态轮询兜底。
@@ -24,12 +25,6 @@ namespace JiaoLongControl.Server.Core.Controllers
     [ClassInterface(ClassInterfaceType.AutoDual)]
     public class OsdController : IDisposable
     {
-        // 连续按键防抖: 钩子早于系统改状态, 留极少时间让 Caps/音量生效; 过长会明显慢于原生 OSD
-        private const int DebounceDelayMs = 36;
-
-        // 同类 OSD 已驻留时的原位快刷节流 (连按音量/亮度时数值跟上)
-        private const int LiveRefreshMs = 16;
-
         // 强调色 = 工具箱现有主题色板
         private const string AccentVolume = "#3B82F6";      // 蓝 (信息)
         private const string AccentDisplay = "#F59E0B";     // 琥珀 (屏幕亮度)
@@ -48,7 +43,6 @@ namespace JiaoLongControl.Server.Core.Controllers
 
         // 系统媒体会话 (SMTC): 仅挂接"当前会话", 切歌/播放状态变化时提示曲名与歌手
         private readonly object _mediaLock = new();
-        private readonly Dictionary<string, PendingOsd> _pending = new();
         private bool _disposed;
         private IntPtr _hook = IntPtr.Zero;
         private byte? _lastBrightness;
@@ -270,6 +264,8 @@ namespace JiaoLongControl.Server.Core.Controllers
                     bool isDown = wParam == (IntPtr)User32.WM_KEYDOWN || wParam == (IntPtr)User32.WM_SYSKEYDOWN;
                     int vk = (int)kb.vkCode;
 
+                    bool isUp = wParam == (IntPtr)User32.WM_KEYUP || wParam == (IntPtr)User32.WM_SYSKEYUP;
+
                     // 接管音量键: 吞掉 DOWN/UP 阻止系统原生音量弹窗, 由本程序调整音量
                     if ((vk == User32.VK_VOLUME_UP || vk == User32.VK_VOLUME_DOWN || vk == User32.VK_VOLUME_MUTE) &&
                         IsVolumeKeyTakeoverEnabled())
@@ -278,40 +274,31 @@ namespace JiaoLongControl.Server.Core.Controllers
                         return (IntPtr)1;
                     }
 
-                    if (isDown)
+                    // 锁定键: KEYUP 时状态已切换完毕, 立即弹 OSD (KEYDOWN+防抖会时快时慢)
+                    if (isUp)
+                    {
+                        switch (vk)
+                        {
+                            case User32.VK_CAPITAL:
+                                ShowLockImmediate(User32.VK_CAPITAL, "大写锁定", ref _lastCaps);
+                                break;
+                            case User32.VK_NUMLOCK:
+                                ShowLockImmediate(User32.VK_NUMLOCK, "数字锁定", ref _lastNum);
+                                break;
+                            case User32.VK_SCROLL:
+                                ShowLockImmediate(User32.VK_SCROLL, "滚动锁定", ref _lastScroll);
+                                break;
+                        }
+                    }
+                    else if (isDown)
                     {
                         switch (vk)
                         {
                             case User32.VK_VOLUME_UP:
                             case User32.VK_VOLUME_DOWN:
                             case User32.VK_VOLUME_MUTE:
-                                DebounceShow("volume", () => ShowVolumeOsd(force: false));
-                                break;
-                            case User32.VK_CAPITAL:
-                                DebounceShow("capslock", () =>
-                                {
-                                    // 同步事件/轮询基线, 避免对同一变化重复弹 OSD
-                                    _lastCaps = User32.IsToggleOn(User32.VK_CAPITAL);
-                                    NotifyLockStatesChanged();
-                                    ShowLockOsd(User32.VK_CAPITAL, "大写锁定", force: false);
-                                });
-                                break;
-                            case User32.VK_NUMLOCK:
-                                DebounceShow("numlock", () =>
-                                {
-                                    // 同步事件/轮询基线, 避免对同一变化重复弹 OSD
-                                    _lastNum = User32.IsToggleOn(User32.VK_NUMLOCK);
-                                    NotifyLockStatesChanged();
-                                    ShowLockOsd(User32.VK_NUMLOCK, "数字锁定", force: false);
-                                });
-                                break;
-                            case User32.VK_SCROLL:
-                                DebounceShow("scrolllock", () =>
-                                {
-                                    _lastScroll = User32.IsToggleOn(User32.VK_SCROLL);
-                                    NotifyLockStatesChanged();
-                                    ShowLockOsd(User32.VK_SCROLL, "滚动锁定", force: false);
-                                });
+                                // 未接管时系统已改音量, 立即显示
+                                ShowVolumeImmediate();
                                 break;
                         }
                     }
@@ -338,7 +325,7 @@ namespace JiaoLongControl.Server.Core.Controllers
         {
             var dispatcher = Application.Current?.Dispatcher;
             if (dispatcher == null) return;
-            dispatcher.BeginInvoke(() =>
+            dispatcher.BeginInvoke(DispatcherPriority.Send, () =>
             {
                 try
                 {
@@ -358,8 +345,33 @@ namespace JiaoLongControl.Server.Core.Controllers
                 {
                     Logger.Warn($"OSD 接管音量键调整失败: {ex.Message}");
                 }
-                DebounceShow("volume", () => ShowVolumeOsd(force: false));
+                ShowVolumeImmediate();
             });
+        }
+
+        /// <summary>锁定键 KEYUP 后立即弹 OSD (状态已落定, 无防抖延迟)。</summary>
+        private void ShowLockImmediate(int vk, string title, ref bool? lastBaseline)
+        {
+            lastBaseline = User32.IsToggleOn(vk);
+            NotifyLockStatesChanged();
+            var dispatcher = Application.Current?.Dispatcher ?? _window?.Dispatcher;
+            if (dispatcher == null) return;
+            dispatcher.BeginInvoke(DispatcherPriority.Send, () => ShowLockOsd(vk, title, force: false));
+        }
+
+        /// <summary>音量变更后立即弹 OSD (无 DispatcherTimer 防抖抖动)。</summary>
+        private void ShowVolumeImmediate()
+        {
+            var dispatcher = _window?.Dispatcher;
+            if (dispatcher == null)
+            {
+                ShowVolumeOsd(force: false);
+                return;
+            }
+            if (dispatcher.CheckAccess())
+                ShowVolumeOsd(force: false);
+            else
+                dispatcher.BeginInvoke(DispatcherPriority.Send, () => ShowVolumeOsd(force: false));
         }
 
         // ===== 触发源 =====
@@ -1296,56 +1308,6 @@ namespace JiaoLongControl.Server.Core.Controllers
             });
         }
 
-        /// <summary>防抖键 → 窗口 CurrentKind, 用于判断是否已在驻留快刷。</summary>
-        private static string DebounceKind(string key) => key switch
-        {
-            "capslock" or "numlock" or "scrolllock" => "lock",
-            "volume" => "volume",
-            "display" => "display",
-            _ => key,
-        };
-
-        private void DebounceShow(string key, Action action)
-        {
-            var dispatcher = Application.Current?.Dispatcher;
-            if (dispatcher == null) return;
-            // Send: 尽量贴着输入/事件线程投递, 减少「有时慢一截」的调度抖动
-            dispatcher.BeginInvoke(DispatcherPriority.Send, () =>
-            {
-                try
-                {
-                    var kind = DebounceKind(key);
-                    var live = _window?.IsDwellingKind(kind) == true;
-
-                    if (_pending.TryGetValue(key, out var pending))
-                    {
-                        // 只更新待执行动作, 不重置计时 (前缘触发):
-                        // 旧逻辑每次按键 Restart 会把首次弹出拖成「松手才出」, 体感时快时慢
-                        pending.Action = action;
-                        return;
-                    }
-
-                    var timer = new DispatcherTimer
-                    {
-                        Interval = TimeSpan.FromMilliseconds(live ? LiveRefreshMs : DebounceDelayMs),
-                    };
-                    var entry = new PendingOsd { Timer = timer, Action = action, Live = live };
-                    timer.Tick += (_, _) =>
-                    {
-                        timer.Stop();
-                        _pending.Remove(key);
-                        entry.Action();
-                    };
-                    _pending[key] = entry;
-                    timer.Start();
-                }
-                catch (Exception ex)
-                {
-                    Logger.Warn($"OSD 调度失败: {ex.Message}");
-                }
-            });
-        }
-
         private void EnsureWindow()
         {
             var dispatcher = Application.Current?.Dispatcher;
@@ -1361,6 +1323,18 @@ namespace JiaoLongControl.Server.Core.Controllers
                 // 预热锁定/触摸板图标, 避免首次 Caps 才解码 PNG
                 foreach (var name in new[] { "AllCaps.png", "AllLowercase.png", "Lock.png", "Unlock.png", "TouchPad.png" })
                     OsdWindow.WarmIcon(IconPackBase + name);
+                // 暖机: Show 一次再 Hide, 预先创建 HWND/布局, 减少首次冷启动抖动
+                try
+                {
+                    _window.Opacity = 0;
+                    _window.Show();
+                    _window.Hide();
+                    _window.Opacity = 1;
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn($"OSD 窗口暖机失败: {ex.Message}");
+                }
             }
 
             if (dispatcher.CheckAccess()) create();
@@ -1386,15 +1360,6 @@ namespace JiaoLongControl.Server.Core.Controllers
         }
 
         // ===== 调度与显示 =====
-
-        private sealed class PendingOsd
-        {
-            public DispatcherTimer Timer { get; init; } = null!;
-            public Action Action { get; set; } = null!;
-
-            /// <summary>true = 原位快刷节流窗口 (到点直接读最新状态, 不重置); false = 首次显示防抖。</summary>
-            public bool Live { get; init; }
-        }
     }
 
     /// <summary>
