@@ -418,18 +418,18 @@ public class OsdSection
 
     [ConfigComment("EC 状态轮询间隔 (ms, 事件通道不可用时的兜底)")]
     [ConfigRange(500, 5000)]
-    public int PollIntervalMs { get; set; } = 1000;
+    public int PollIntervalMs { get; set; } = 500;
 
     [ConfigComment("出入场动画时长 (ms, 入场展开与出场收圆各占此时长)")]
     [ConfigRange(200, 3000)]
-    public int AnimationMs { get; set; } = 480;
+    public int AnimationMs { get; set; } = 200;
 
     [ConfigComment("OSD 显示时长 (ms, 完全展开后的驻留时间)")]
     [ConfigRange(500, 5000)]
-    public int DurationMs { get; set; } = 2000;
+    public int DurationMs { get; set; } = 500;
 
     [ConfigComment("显示位置: TopCenter / BottomCenter / Custom")]
-    public string Position { get; set; } = "TopCenter";
+    public string Position { get; set; } = "Custom";
 
     [ConfigComment("自定义位置水平百分比 (胶囊在主屏工作区可移动行程的 0~100%, Position=Custom 时生效)")]
     [ConfigRange(0, 100)]
@@ -437,7 +437,7 @@ public class OsdSection
 
     [ConfigComment("自定义位置垂直百分比 (胶囊在主屏工作区可移动行程的 0~100%, Position=Custom 时生效)")]
     [ConfigRange(0, 100)]
-    public int CustomY { get; set; } = 8;
+    public int CustomY { get; set; } = 96;
 
     [ConfigComment("面板不透明度 (%)")]
     [ConfigRange(30, 100)]
@@ -445,5 +445,5 @@ public class OsdSection
 
     [ConfigComment("界面缩放 (%)")]
     [ConfigRange(100, 200)]
-    public int Scale { get; set; } = 150;
+    public int Scale { get; set; } = 100;
 }

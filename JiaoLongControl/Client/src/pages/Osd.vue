@@ -18,7 +18,7 @@ const positionOptions: Array<{ value: OsdPosition; label: string }> = [
   { value: 'BottomCenter', label: '底部居中' },
   { value: 'Custom', label: '自定义' },
 ]
-const currentPosition = computed(() => osdData.value?.Position ?? 'TopCenter')
+const currentPosition = computed(() => osdData.value?.Position ?? 'Custom')
 
 function selectPosition(value: OsdPosition) {
   if (!osdData.value || currentPosition.value === value) return
@@ -38,7 +38,7 @@ let previewDragging = false
 
 const pillStyle = computed(() => {
   const x = ((osdData.value?.CustomX ?? 50) / 100).toFixed(4)
-  const y = ((osdData.value?.CustomY ?? 8) / 100).toFixed(4)
+  const y = ((osdData.value?.CustomY ?? 96) / 100).toFixed(4)
   return {
     left: `calc((100% - ${PILL_W}px) * ${x})`,
     top: `calc((100% - ${PILL_H}px) * ${y})`,

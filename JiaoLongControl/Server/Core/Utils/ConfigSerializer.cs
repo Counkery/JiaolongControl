@@ -35,6 +35,8 @@ public static class ConfigSerializer
     // 自该版本起为三档写入 SoftSchedule（EPP / CPMIN / Boost，AC·DC）。
     private static readonly Version SoftScheduleVersion = new("10.19.38");
     private static readonly Version OfficeSweetSpotVersion = new("10.19.53");
+    // 自该版本起 OSD 默认：Custom 50%/96%、出入场 200ms、显示 500ms、缩放 100%、轮询 500ms。
+    private static readonly Version OsdLayoutDefaultsVersion = new("10.19.61");
 
     public static string ConfigDir { get; set; } = Path.Combine(AppContext.BaseDirectory, "config");
     public static string ConfigPath => Path.Combine(ConfigDir, FileName);
@@ -157,6 +159,32 @@ public static class ConfigSerializer
             var saving = LowConfig.Cpu.Saving;
             if (saving.CpuMaxFrequency == 4400 && saving.CpuLongPower == 45)
                 saving.CpuMaxFrequency = 4500;
+        }
+
+        // 升级到 10.19.61+：刷新 OSD 布局/时长默认；用户已改过的项保留。
+        if (!Version.TryParse(LowConfig.Version, out oldVersion) || oldVersion < OsdLayoutDefaultsVersion)
+        {
+            var osd = LowConfig.Osd;
+            bool fromPreset = osd.Position is "TopCenter" or "BottomCenter";
+            if (fromPreset)
+            {
+                osd.Position = "Custom";
+                osd.CustomX = 50;
+                osd.CustomY = 96;
+            }
+            else if (osd.CustomY is 8 or 0)
+            {
+                osd.CustomY = 96;
+            }
+
+            if (osd.AnimationMs is 480 or 400)
+                osd.AnimationMs = 200;
+            if (osd.DurationMs is 2000 or 1500)
+                osd.DurationMs = 500;
+            if (osd.Scale is 150 or 125)
+                osd.Scale = 100;
+            if (osd.PollIntervalMs is 1000 or 800)
+                osd.PollIntervalMs = 500;
         }
 
         // 默认无损迁移
