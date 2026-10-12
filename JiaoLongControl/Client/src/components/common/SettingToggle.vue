@@ -4,12 +4,17 @@ import { Message } from '@arco-design/web-vue'
 import SettingCardComponent from '@/components/common/SettingCardComponent.vue'
 import { useConfigStore } from '@/stores/config'
 
-const props = defineProps<{
-  title: string
-  description: string
-  /** config JSON 内的布尔字段路径, 如 "App.BootAdvancedCPUSystem" */
-  configPath: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    title: string
+    description: string
+    /** config JSON 内的布尔字段路径, 如 "App.BootAdvancedCPUSystem" */
+    configPath: string
+    /** 为 true 时禁用开关 (如总开关关闭时的子项) */
+    disabled?: boolean
+  }>(),
+  { disabled: false },
+)
 
 const configStore = useConfigStore()
 const loading = ref(false)
@@ -37,7 +42,7 @@ function writePath(v: unknown) {
 }
 
 async function onChange(next: string | number | boolean) {
-  if (typeof next !== 'boolean' || !configStore.config) return
+  if (props.disabled || typeof next !== 'boolean' || !configStore.config) return
   const prev = readValue()
   loading.value = true
   try {
@@ -60,7 +65,12 @@ async function onChange(next: string | number | boolean) {
 <template>
   <setting-card-component :title="title" :description="description">
     <template #extra>
-      <a-switch :model-value="value" :loading="loading" @change="onChange($event)">
+      <a-switch
+        :model-value="value"
+        :loading="loading"
+        :disabled="disabled"
+        @change="onChange($event)"
+      >
         <template #checked-icon>
           <icon-check />
         </template>

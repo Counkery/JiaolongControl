@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import {computed, onMounted, ref} from 'vue'
+import {computed, onMounted, ref, watch} from 'vue'
 import {Message} from '@arco-design/web-vue'
 import SettingToggle from '@/components/common/SettingToggle.vue'
 import {useConfigStore} from '@/stores/config'
@@ -12,6 +12,26 @@ if (!configStore.config) {
 }
 const osdData = computed(() => configStore.config?.Osd)
 
+/** 总开关关闭时：内容与外观不可改，总控两项仍可操作 */
+const contentDisabled = computed(() => !osdData.value?.Enabled)
+const telemetryDisabled = computed(
+  () => contentDisabled.value || !osdData.value?.ShowPerformanceMode,
+)
+
+const advancedOpen = ref(false)
+const glossaryOpen = ref(false)
+
+// 关闭「性能模式」时顺带关掉遥测，避免开着看不见
+watch(
+  () => osdData.value?.ShowPerformanceMode,
+  (on) => {
+    if (on === false && osdData.value?.ShowPerfTelemetry) {
+      osdData.value.ShowPerfTelemetry = false
+      void configStore.saveConfig()
+    }
+  },
+)
+
 // ===== 显示效果 =====
 const positionOptions: Array<{ value: OsdPosition; label: string }> = [
   { value: 'TopCenter', label: '顶部居中' },
@@ -21,12 +41,13 @@ const positionOptions: Array<{ value: OsdPosition; label: string }> = [
 const currentPosition = computed(() => osdData.value?.Position ?? 'Custom')
 
 function selectPosition(value: OsdPosition) {
-  if (!osdData.value || currentPosition.value === value) return
+  if (contentDisabled.value || !osdData.value || currentPosition.value === value) return
   osdData.value.Position = value
   configStore.debouncedSave()
 }
 
 function saveDebounced() {
+  if (contentDisabled.value) return
   configStore.debouncedSave()
 }
 
@@ -49,7 +70,7 @@ const pillStyle = computed(() => {
 
 function applyPreviewPosition(e: PointerEvent) {
   const el = previewEl.value
-  if (!el || !osdData.value) return
+  if (!el || !osdData.value || contentDisabled.value) return
   const rect = el.getBoundingClientRect()
   const travelX = Math.max(1, rect.width - PILL_W)
   const travelY = Math.max(1, rect.height - PILL_H)
@@ -60,7 +81,7 @@ function applyPreviewPosition(e: PointerEvent) {
 }
 
 function onPillPointerDown(e: PointerEvent) {
-  if (!osdData.value) return
+  if (!osdData.value || contentDisabled.value) return
   previewDragging = true
   if (currentPosition.value !== 'Custom') osdData.value.Position = 'Custom'
   ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
@@ -96,7 +117,6 @@ async function onVolumeChange(val: number | [number, number]) {
   try {
     const res = await Osd.SetVolume(val)
     if (!res.Success) Message.error(res.Message)
-    // 回读实际值，避免滑条与系统真实音量脱节（如设备切换后）
     await refreshVolume()
   } catch {
     Message.error('设置音量失败')
@@ -127,11 +147,14 @@ async function preview(kind: string, value = 0) {
 }
 
 const previewItems = [
-  { kind: 'volume', label: '音量指示' },
+  { kind: 'volume', label: '音量' },
+  { kind: 'display', label: '亮度' },
   { kind: 'lock', label: '锁定键' },
-  { kind: 'keyboard', label: '键盘背光' },
+  { kind: 'keyboard', label: '背光' },
   { kind: 'perf', label: '性能模式' },
-  { kind: 'media', label: '媒体播放' },
+  { kind: 'fnlock', label: 'Fn 锁' },
+  { kind: 'touchpad', label: '触摸板' },
+  { kind: 'media', label: '媒体' },
 ]
 
 onMounted(() => {
@@ -142,84 +165,113 @@ onMounted(() => {
 <template>
   <div v-if="osdData" class="h-full overflow-y-auto text-ink p-6 no-scrollbar">
     <div class="max-w-[1300px] mx-auto">
-      <!-- 头部标题: 通栏显示, 下方左右两列顶部齐平 -->
       <div>
         <h1 class="text-2xl font-bold tracking-wide">OSD 屏幕显示</h1>
         <p class="text-[13px] text-gray-500 mt-1">
-          OSD悬浮指示器：按键时在屏幕顶部即时显示状态，完成后悄然隐去
+          按键时在屏幕弹出置顶胶囊，调完后自动隐去；先开总开关，再选要显示的内容与外观
         </p>
       </div>
 
       <div class="flex flex-col lg:flex-row gap-6 pt-6">
-        <!-- ==================== 左列: 开关与显示项目 ==================== -->
-        <div class="flex-1 space-y-4">
-          <SettingToggle
-            config-path="Osd.Enabled"
-            description="启用后，按下音量键、大小写锁定等按键时，屏幕上会弹出置顶的胶囊指示器（无需重启，即时生效）"
-            title="启用 OSD 屏幕显示"
-          />
-          <SettingToggle
-            config-path="Osd.ShowVolume"
-            description="按下音量增大 / 减小 / 静音键时，显示系统音量条与百分比；OSD 停留期间可直接拖动进度条调整音量，或点击小喇叭按钮切换静音"
-            title="音量指示"
-          />
-          <SettingToggle
-            config-path="Osd.ShowScreenBrightness"
-            description="按下屏幕亮度增减键时，显示亮度条与百分比（优先订阅 WMI 亮度事件，接近系统原生速度；开启「屏蔽系统与厂家旧 OSD」后由本胶囊接替系统亮度浮层）。停留期间可拖动进度条调节"
-            title="屏幕亮度"
-          />
-          <SettingToggle
-            config-path="Osd.SuppressNativeVolumeOsd"
-            description="开启后不再弹出 Windows 自带的音量、亮度、媒体浮层；音量键由本程序调整并显示自绘 OSD，屏幕亮度由上方「屏幕亮度」胶囊接替。厂家旧 OSD（BLDFnHotkeyUtility，含 Caps 等）跑在系统完整性，无法直接藏窗，因此在「启用 OSD」或本项打开时会挂起该 OSD 进程；Fn / EC 仍由 BLDHotKeyService 处理。关闭本项且关掉「启用 OSD」后，厂家进程恢复。"
-            title="屏蔽系统与厂家旧 OSD"
-          />
-          <SettingToggle
-            description="按下大写锁定 / 数字锁定 / 滚动锁定键时，显示短胶囊开关状态（不含右侧进度条区域）"
-            title="锁定键状态"
-            config-path="Osd.ShowLockKeys"
-          />
-          <SettingToggle
-            config-path="Osd.ShowKeyboardBacklight"
-            description="通过本软件调整键盘背光亮度时，显示当前档位（Fn 组合键由 EC 直接处理）；OSD 停留期间可直接点击分段选择 0~3 档"
-            title="键盘背光档位"
-          />
-          <SettingToggle
-            description="切换性能模式时（软件内或原生 Fn 热键）显示当前模式名称（原生热键经 EC 状态轮询检测）"
-            title="性能模式切换"
-            config-path="Osd.ShowPerformanceMode"
-          />
-          <SettingToggle
-            config-path="Osd.ShowPerfTelemetry"
-            description="开启后，模式切换 OSD 的标题附带模式名称，并在读取完成后补充显示当前 CPU / GPU 温度与双风扇转速（经 EC 与 NVIDIA API 后台读取，约需零点几秒，读取失败时仅显示模式名）"
-            title="模式 OSD 附带温度/转速"
-          />
-          <SettingToggle
-            config-path="Osd.ShowFnLock"
-            description="原生 Fn 组合键切换功能键锁定时显示状态（EC 状态轮询检测，变化后约一个轮询间隔内弹出）"
-            title="功能键锁定 (Fn Lock)"
-          />
-          <SettingToggle
-            title="触摸板锁定"
-            config-path="Osd.ShowTouchpad"
-            description="原生 Fn 组合键切换触摸板锁定时显示短胶囊状态（EC 状态轮询检测，变化后约一个轮询间隔内弹出）"
-          />
-          <SettingToggle
-            config-path="Osd.ShowMedia"
-            description="系统有程序开始播放音乐或切歌时，显示曲名与歌手（经 Windows 系统媒体会话检测，支持网易云、Spotify、浏览器等）；胶囊右侧提供上一曲 / 播放暂停 / 下一曲控制按钮"
-            title="媒体播放提示"
-          />
+        <!-- 左列: 总控 + 显示内容 -->
+        <div class="flex-1 space-y-6">
+          <section class="space-y-3">
+            <h2
+              class="text-xs font-black text-purple-400 uppercase tracking-widest border-l-4 border-purple-600 pl-2.5"
+            >
+              总控
+            </h2>
+            <SettingToggle
+              config-path="Osd.Enabled"
+              description="开启后按音量、锁定等键弹出胶囊指示器，即时生效"
+              title="启用 OSD"
+            />
+            <SettingToggle
+              config-path="Osd.SuppressNativeVolumeOsd"
+              description="隐藏 Windows 自带音量/亮度浮层，并由本程序接替厂家旧 Caps 等 OSD"
+              title="屏蔽系统与厂家旧 OSD"
+            />
+          </section>
+
+          <section class="space-y-3" :class="contentDisabled ? 'opacity-55' : ''">
+            <h2
+              class="text-xs font-black text-blue-400 uppercase tracking-widest border-l-4 border-blue-500 pl-2.5"
+            >
+              显示内容
+            </h2>
+
+            <p class="text-[11px] text-gray-500 px-0.5">系统按键</p>
+            <SettingToggle
+              :disabled="contentDisabled"
+              config-path="Osd.ShowVolume"
+              description="音量增减/静音时显示进度条，停留期间可拖条或点喇叭静音"
+              title="音量指示"
+            />
+            <SettingToggle
+              :disabled="contentDisabled"
+              config-path="Osd.ShowScreenBrightness"
+              description="亮度键变化时显示亮度条，停留期间可拖条调节"
+              title="屏幕亮度"
+            />
+            <SettingToggle
+              :disabled="contentDisabled"
+              config-path="Osd.ShowLockKeys"
+              description="大写/数字/滚动锁定切换时显示短胶囊状态"
+              title="锁定键状态"
+            />
+
+            <p class="text-[11px] text-gray-500 px-0.5 pt-2">本机 Fn / EC</p>
+            <SettingToggle
+              :disabled="contentDisabled"
+              config-path="Osd.ShowKeyboardBacklight"
+              description="调整键盘背光时显示 0～3 档，停留期间可点选分段"
+              title="键盘背光档位"
+            />
+            <SettingToggle
+              :disabled="contentDisabled"
+              config-path="Osd.ShowPerformanceMode"
+              description="切换性能模式时显示当前模式名称"
+              title="性能模式切换"
+            />
+            <SettingToggle
+              :disabled="telemetryDisabled"
+              config-path="Osd.ShowPerfTelemetry"
+              description="模式胶囊额外显示 CPU/GPU 温度与双风扇转速"
+              title="模式附带温度/转速"
+            />
+            <SettingToggle
+              :disabled="contentDisabled"
+              config-path="Osd.ShowFnLock"
+              description="Fn 锁切换时显示开启/关闭"
+              title="功能键锁定 (Fn Lock)"
+            />
+            <SettingToggle
+              :disabled="contentDisabled"
+              config-path="Osd.ShowTouchpad"
+              description="触摸板锁定切换时显示短胶囊状态"
+              title="触摸板锁定"
+            />
+
+            <p class="text-[11px] text-gray-500 px-0.5 pt-2">媒体</p>
+            <SettingToggle
+              :disabled="contentDisabled"
+              config-path="Osd.ShowMedia"
+              description="开始播放或切歌时显示曲名与歌手，可控制上一曲/暂停/下一曲"
+              title="媒体播放提示"
+            />
+          </section>
         </div>
 
-        <!-- ==================== 右列: 显示效果与预览 ==================== -->
-        <div class="w-full lg:w-[380px] shrink-0 space-y-6">
-          <!-- 显示效果 -->
+        <!-- 右列: 外观 + 预览 + 进阶/说明 -->
+        <div class="w-full lg:w-[380px] shrink-0 space-y-6 lg:sticky lg:top-0 lg:self-start">
           <div
             class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg space-y-5"
+            :class="contentDisabled ? 'opacity-55 pointer-events-none' : ''"
           >
             <h3
               class="text-xs font-black text-purple-400 uppercase tracking-widest border-l-4 border-purple-600 pl-2.5"
             >
-              显示效果
+              外观与位置
             </h3>
 
             <div>
@@ -230,6 +282,7 @@ onMounted(() => {
                 <button
                   v-for="opt in positionOptions"
                   :key="opt.value"
+                  type="button"
                   :class="
                     currentPosition === opt.value
                       ? 'bg-cyber-purple text-white shadow-[0_0_10px_var(--color-glow-purple)]'
@@ -242,7 +295,6 @@ onMounted(() => {
                 </button>
               </div>
 
-              <!-- 位置预览: 16:9 屏幕示意, 拖动胶囊即保存为自定义位置 -->
               <div
                 class="relative w-full mt-2.5 rounded-lg border border-ink/[0.08] bg-ink/[0.03] overflow-hidden select-none"
                 style="aspect-ratio: 16 / 9"
@@ -261,9 +313,8 @@ onMounted(() => {
                 />
               </div>
               <p class="text-[10px] text-gray-600 leading-relaxed mt-1.5">
-                拖动胶囊到任意位置即保存为自定义位置（真实 OSD 出现在主屏的对应处）；
-                选择预设位置时忽略自定义坐标。当前：X {{ osdData.CustomX }}% · Y
-                {{ osdData.CustomY }}%
+                拖动胶囊即存为自定义位置；选预设时忽略自定义坐标。当前：X
+                {{ osdData.CustomX }}% · Y {{ osdData.CustomY }}%
               </p>
             </div>
 
@@ -274,6 +325,7 @@ onMounted(() => {
               </div>
               <a-slider
                 v-model="osdData.AnimationMs"
+                :disabled="contentDisabled"
                 :max="3000"
                 :min="60"
                 :step="20"
@@ -289,6 +341,7 @@ onMounted(() => {
               </div>
               <a-slider
                 v-model="osdData.DurationMs"
+                :disabled="contentDisabled"
                 :max="5000"
                 :min="500"
                 :step="100"
@@ -304,6 +357,7 @@ onMounted(() => {
               </div>
               <a-slider
                 v-model="osdData.Opacity"
+                :disabled="contentDisabled"
                 :max="100"
                 :min="30"
                 class="slider-blue"
@@ -318,6 +372,7 @@ onMounted(() => {
               </div>
               <a-slider
                 v-model="osdData.Scale"
+                :disabled="contentDisabled"
                 :max="200"
                 :min="100"
                 :step="5"
@@ -325,28 +380,9 @@ onMounted(() => {
                 @change="saveDebounced"
               />
             </div>
-
-            <div class="space-y-1.5">
-              <div class="flex justify-between items-center text-[11px]">
-                <span class="text-gray-400">EC 状态轮询间隔</span>
-                <span class="text-ink font-mono">{{ osdData.PollIntervalMs }} ms</span>
-              </div>
-              <a-slider
-                v-model="osdData.PollIntervalMs"
-                :max="5000"
-                :min="100"
-                :step="50"
-                class="slider-red"
-                @change="saveDebounced"
-              />
-              <p class="text-[10px] text-gray-600 leading-relaxed">
-                原生 Fn 热键（性能模式 / 背光 / Fn 锁 / 触摸板锁）优先经 HID_EVENT20
-                事件通道即时检测；此间隔仅在事件通道不可用时作为轮询兜底
-              </p>
-            </div>
           </div>
 
-          <!-- 效果预览 -->
+          <!-- 效果预览：总开关关闭时仍可点预览（force）验证样式 -->
           <div
             class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg space-y-4"
           >
@@ -358,7 +394,7 @@ onMounted(() => {
 
             <div class="space-y-1.5">
               <div class="flex justify-between items-center text-[11px]">
-                <span class="text-gray-400">系统音量（拖动即弹出 OSD）</span>
+                <span class="text-gray-400">系统音量（拖动即弹出）</span>
                 <span class="text-ink font-mono">{{ volume }}%{{ muted ? ' · 静音' : '' }}</span>
               </div>
               <div class="flex items-center gap-3">
@@ -391,27 +427,82 @@ onMounted(() => {
             </div>
           </div>
 
-          <!-- 说明 -->
+          <!-- 进阶 -->
           <div
-            class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg"
+            class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl shadow-lg overflow-hidden"
           >
-            <h2 class="text-[13px] font-semibold text-gray-300 mb-3">名词解释</h2>
-            <div class="text-[11px] text-gray-500 leading-relaxed space-y-2">
+            <button
+              type="button"
+              class="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-ink/[0.03] transition"
+              @click="advancedOpen = !advancedOpen"
+            >
+              <span
+                class="text-xs font-black text-rose-400 uppercase tracking-widest border-l-4 border-rose-500 pl-2.5"
+              >
+                进阶
+              </span>
+              <icon-down
+                class="text-gray-500 transition-transform"
+                :class="advancedOpen ? 'rotate-180' : ''"
+              />
+            </button>
+            <div v-show="advancedOpen" class="px-5 pb-5 space-y-3 border-t border-ink/[0.05] pt-4">
+              <div class="space-y-1.5">
+                <div class="flex justify-between items-center text-[11px]">
+                  <span class="text-gray-400">EC 状态轮询间隔</span>
+                  <span class="text-ink font-mono">{{ osdData.PollIntervalMs }} ms</span>
+                </div>
+                <a-slider
+                  v-model="osdData.PollIntervalMs"
+                  :disabled="contentDisabled"
+                  :max="5000"
+                  :min="100"
+                  :step="50"
+                  class="slider-red"
+                  @change="saveDebounced"
+                />
+                <p class="text-[10px] text-gray-600 leading-relaxed">
+                  Fn 热键优先走事件通道即时检测；仅在事件不可用时用此间隔轮询兜底。
+                </p>
+              </div>
+              <p class="text-[10px] text-gray-600 leading-relaxed">
+                「屏蔽系统与厂家旧 OSD」会挂起厂家 OSD 进程以避免双弹；关闭本项且关掉「启用
+                OSD」后恢复。Fn / EC 热键服务不受影响。
+              </p>
+            </div>
+          </div>
+
+          <!-- 名词解释 -->
+          <div
+            class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl shadow-lg overflow-hidden"
+          >
+            <button
+              type="button"
+              class="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-ink/[0.03] transition"
+              @click="glossaryOpen = !glossaryOpen"
+            >
+              <span class="text-[13px] font-semibold text-gray-300">名词解释</span>
+              <icon-down
+                class="text-gray-500 transition-transform"
+                :class="glossaryOpen ? 'rotate-180' : ''"
+              />
+            </button>
+            <div
+              v-show="glossaryOpen"
+              class="px-5 pb-5 text-[11px] text-gray-500 leading-relaxed space-y-2 border-t border-ink/[0.05] pt-4"
+            >
               <p>
-                <strong>可交互胶囊</strong>:
-                音量 / 键盘背光 / 媒体 OSD 停留期间可直接操作（拖动调音量、点分段选背光档位、按钮控制播放），操作不抢走当前应用焦点，锁定键等其他 OSD 保持点击穿透。
+                <strong>可交互胶囊</strong
+                >：音量 / 背光 / 媒体停留时可操作，不抢焦点；锁定类保持点击穿透。
               </p>
               <p>
-                <strong>键盘事件触发</strong>:
-                音量与锁定键经全局键盘钩子监听，按键不会被拦截，系统行为不受影响。
+                <strong>键盘触发</strong>：音量与锁定经全局钩子监听；未接管音量时不拦截系统行为。
               </p>
               <p>
-                <strong>自动缩放</strong>:
-                OSD 按显示器 DPI 物理像素定位与渲染，系统缩放调整后位置与清晰度自动适配。
+                <strong>自动缩放</strong>：按显示器 DPI 定位渲染，系统缩放变化后自动适配。
               </p>
               <p>
-                <strong>主题自适应</strong>:
-                胶囊面板自动跟随应用的深色 / 浅色主题，强调色与工具箱配色一致。
+                <strong>主题自适应</strong>：胶囊跟随应用深色 / 浅色主题。
               </p>
             </div>
           </div>
@@ -425,7 +516,6 @@ onMounted(() => {
 </template>
 
 <style lang="scss" scoped>
-/* 与 RyzenSmu 页一致的分色滑条 */
 :deep(.slider-purple .arco-slider-bar) {
   background: linear-gradient(90deg, #6366f1 0%, var(--color-accent-purple) 100%) !important;
   height: 5px !important;

@@ -1074,6 +1074,11 @@ namespace JiaoLongControl.Server.Core.Controllers
                         case "volume":
                             ShowVolumeOsd(force: true);
                             break;
+                        case "display":
+                            ShowScreenBrightnessOsd(
+                                DisplayBrightness.TryGetPercent() ?? _lastScreenBrightness ?? 50,
+                                force: true);
+                            break;
                         case "lock":
                             ShowLockOsd(User32.VK_CAPITAL, "大写锁定", force: true);
                             break;
@@ -1087,6 +1092,40 @@ namespace JiaoLongControl.Server.Core.Controllers
                                 var mode = MethodServices.GetValue<SystemPerMode>(MethodName.SystemPerMode);
                                 OnPerformanceModeChanged(mode, applyHardwareBindings: false);
                             });
+                            break;
+                        case "fnlock":
+                            {
+                                var st = MethodServices.GetValue<ResultState>(MethodName.FnLock);
+                                var cfg = Bridge.Instance.Config.Osd;
+                                ShowOnWindow(new OsdItem
+                                {
+                                    Kind = "fnlock",
+                                    IconGlyph = "\uE72E",
+                                    IconImage = st == ResultState.ON
+                                        ? IconPackBase + "Lock.png"
+                                        : IconPackBase + "Unlock.png",
+                                    AccentHex = AccentFnLock,
+                                    Title = "功能键锁定",
+                                    Subtitle = st == ResultState.ON ? "已开启" : "已关闭",
+                                    BarValue = null,
+                                }, cfg);
+                            }
+                            break;
+                        case "touchpad":
+                            {
+                                var st = MethodServices.GetValue<ResultState>(MethodName.TPLock);
+                                var cfg = Bridge.Instance.Config.Osd;
+                                ShowOnWindow(new OsdItem
+                                {
+                                    Kind = "touchpad",
+                                    IconGlyph = "\uE7E2",
+                                    IconImage = IconPackBase + "TouchPad.png",
+                                    AccentHex = AccentTouchpad,
+                                    Title = "触摸板",
+                                    Subtitle = st == ResultState.ON ? "已锁定" : "已解锁",
+                                    BarValue = null,
+                                }, cfg);
+                            }
                             break;
                         case "media":
                             _ = ShowMediaAsync(_mediaManager?.GetCurrentSession(), force: true);
