@@ -122,19 +122,21 @@ namespace JiaoLongControl.Server.Interop
                 return true;
             if (a.Cpu.CpuProfile != b.Cpu.CpuProfile)
                 return true;
-            return !SameCpuProfile(a.Cpu.Saving, b.Cpu.Saving)
-                   || !SameCpuProfile(a.Cpu.Default, b.Cpu.Default)
-                   || !SameCpuProfile(a.Cpu.Performance, b.Cpu.Performance)
-                   || !SameCpuProfile(a.Cpu.Custom, b.Cpu.Custom);
+            // 只改频率上限不要退出便携场景，否则会把 GPU 功耗墙拉回高档。
+            return !SameCpuProfile(a.Cpu.Saving, b.Cpu.Saving, ignoreFrequency: true)
+                   || !SameCpuProfile(a.Cpu.Default, b.Cpu.Default, ignoreFrequency: true)
+                   || !SameCpuProfile(a.Cpu.Performance, b.Cpu.Performance, ignoreFrequency: true)
+                   || !SameCpuProfile(a.Cpu.Custom, b.Cpu.Custom, ignoreFrequency: true);
         }
 
-        private static bool SameCpuProfile(CpuProfileData? x, CpuProfileData? y)
+        private static bool SameCpuProfile(CpuProfileData? x, CpuProfileData? y, bool ignoreFrequency = false)
         {
             if (ReferenceEquals(x, y)) return true;
             if (x is null || y is null) return false;
             if (x.CpuLongPower != y.CpuLongPower || x.CpuShortPower != y.CpuShortPower ||
-                x.CpuTempWall != y.CpuTempWall || x.CpuMaxFrequency != y.CpuMaxFrequency ||
-                x.CpuTurbo != y.CpuTurbo)
+                x.CpuTempWall != y.CpuTempWall || x.CpuTurbo != y.CpuTurbo)
+                return false;
+            if (!ignoreFrequency && x.CpuMaxFrequency != y.CpuMaxFrequency)
                 return false;
             return SameSoft(x.SoftSchedule, y.SoftSchedule);
         }

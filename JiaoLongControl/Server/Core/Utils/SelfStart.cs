@@ -68,7 +68,8 @@ public class SelfStart
         {
             bridge.NvidiaGpu.LockGpuClock(gpu.GpuClock);
             bridge.NvidiaGpu.LockMemoryClock(gpu.MemoryClock);
-            // bridge.NvidiaGpu.SetPowerLimit(gpu.PowerLimit);
+            if (gpu.PowerLimit > 0)
+                bridge.NvidiaGpu.SetPowerLimit(gpu.PowerLimit);
         }
     }
 }

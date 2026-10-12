@@ -47,13 +47,11 @@ public class FanController : Blding64
         int clamped = FanCeilingRanges.ClampRpm(mode, rpm);
         byte unit = FanCeilingRanges.ToUnit(clamped);
 
-        // 显式设 WMI 上限（含安静日常）时停软件曲线，避免与 Blding 强制设速打架。
-        // 切性能模式绑定：若 AutoFan 正在跑则 PerformanceModeBindings 会跳过本方法，两套语义一致。
+        // 显式设 WMI 上限时只停曲线线程，避免 Stop() 再写回旧上限造成递归。
         try
         {
-            var running = Bridge.Instance.AutoFan.IsRunning();
-            if (running.Success && running.Data is true)
-                Bridge.Instance.AutoFan.Stop();
+            Bridge.Instance.AutoFan.StopLoop();
+            ClearForcedSpeed();
         }
         catch { /* Bridge 未就绪时忽略 */ }
 
@@ -128,20 +126,56 @@ public class FanController : Blding64
 
     public CommandResult RemoveFanSpeed() => RestoreEcAutoFan();
 
+    /// <summary>只清 Blding 强制转速，不动 WMI 上限开关。</summary>
+    public void ClearForcedSpeed()
+    {
+        try
+        {
+            if (IsInitialized)
+                base.RemoveFanSpeed();
+        }
+        catch
+        {
+            /* 驱动未就绪时忽略 */
+        }
+    }
+
+    /// <summary>按当前 EC 模式写回配置里记住的转速上限。未启用模式绑定时才交回 EC 自动。</summary>
+    public CommandResult ReapplySavedCeiling()
+    {
+        var scene = Bridge.Instance.CpuPowerKeepAlive.TransientScene;
+        if (string.Equals(scene, "Portable135", StringComparison.Ordinal))
+            return SetFanCeilingRpm(2700);
+        if (string.Equals(scene, "QuietDaily", StringComparison.Ordinal))
+            return SetFanCeilingRpm(3500);
+
+        var fan = Bridge.Instance.Config.Fan;
+        if (!fan.ApplyFanOnModeChange)
+            return RestoreEcAutoFan();
+
+        var mode = MethodServices.GetValue<SystemPerMode>(MethodName.SystemPerMode);
+        if (mode == SystemPerMode.Unknow)
+            mode = SystemPerMode.BalanceMode;
+        int rpm = mode switch
+        {
+            SystemPerMode.QuietMode => fan.QuietModeFanRpm,
+            SystemPerMode.PerformanceMode => fan.PerformanceModeFanRpm,
+            _ => fan.BalanceModeFanRpm
+        };
+        return SetFanCeilingRpm(rpm);
+    }
+
     /// <summary>
     /// 交回 EC 自动风扇：Blding 目标转速写 0（若驱动可用）+ 关闭 WMI 上限开关 (FAAP)。
-    /// 进程退出/崩溃/停止软件曲线时调用；Blding 未就绪时仍尝试关 FAAP。
+    /// 用于退出程序，或用户明确关闭转速上限。停止软件曲线不要走这里。
     /// </summary>
     public CommandResult RestoreEcAutoFan()
     {
         bool bldingOk = false;
         try
         {
-            if (IsInitialized)
-            {
-                base.RemoveFanSpeed();
-                bldingOk = true;
-            }
+            ClearForcedSpeed();
+            bldingOk = IsInitialized;
         }
         catch
         {

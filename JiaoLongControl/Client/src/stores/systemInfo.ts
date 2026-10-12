@@ -11,17 +11,21 @@ export interface CpuStatsInfo {
 
 export interface SystemInfoState {
   cpuTemp: number
+  cpuPackagePower: number
   cpuStats: CpuStatsInfo | null
   gpuTemp: number
   fanSpeed: FanSpeedInfo
   gpuStats: GpuStats | null
   error: string | null
   loading: boolean
+  pollingPaused: boolean
+  staticGpuLoaded: boolean
 }
 
 export const useSystemInfoStore = defineStore('systemInfo', {
   state: (): SystemInfoState => ({
     cpuTemp: 0,
+    cpuPackagePower: 0,
     cpuStats: null,
     gpuTemp: 0,
     fanSpeed: {
@@ -31,6 +35,8 @@ export const useSystemInfoStore = defineStore('systemInfo', {
     gpuStats: null,
     error: null,
     loading: false,
+    pollingPaused: false,
+    staticGpuLoaded: false,
   }),
 
   getters: {
@@ -47,21 +53,51 @@ export const useSystemInfoStore = defineStore('systemInfo', {
   },
 
   actions: {
+    setPollingPaused(paused: boolean) {
+      this.pollingPaused = paused
+      if (!paused) void this.fetchSystemInfo()
+    },
+
+    async fetchStaticGpu() {
+      if (this.staticGpuLoaded) return
+      const [gpuName, gpuDriverVersion, gpuDriverDate, gpuMemoryTotal, gpuBusWidth] =
+        await Promise.all([
+          NvidiaGpu.GetGpuName(),
+          NvidiaGpu.GetGpuDriverVersion(),
+          NvidiaGpu.GetGpuDriverDate(),
+          NvidiaGpu.GetGpuMemoryTotal(),
+          NvidiaGpu.GetGpuBusWidth(),
+        ])
+      const prev = this.gpuStats
+      this.gpuStats = {
+        GpuName: gpuName.Success ? gpuName.Data : prev?.GpuName || 'N/A',
+        DriverVersion: gpuDriverVersion.Success ? gpuDriverVersion.Data : prev?.DriverVersion || 'N/A',
+        DriverDate: gpuDriverDate.Success ? gpuDriverDate.Data : prev?.DriverDate || 'N/A',
+        MemoryTotal: gpuMemoryTotal.Success ? gpuMemoryTotal.Data : prev?.MemoryTotal || 'N/A',
+        BusWidth: gpuBusWidth.Success ? gpuBusWidth.Data : prev?.BusWidth || 'N/A',
+        GpuUtilization: prev?.GpuUtilization || '0',
+        MemoryUtilization: prev?.MemoryUtilization || '0',
+        CoreClock: prev?.CoreClock || '0',
+        MemoryClock: prev?.MemoryClock || '0',
+        FanSpeed: prev?.FanSpeed || '0',
+        GpuTemperature: prev?.GpuTemperature || '0',
+      }
+      this.staticGpuLoaded = true
+    },
+
     async fetchSystemInfo() {
+      if (this.pollingPaused) return
       this.loading = true
       try {
+        if (!this.staticGpuLoaded) await this.fetchStaticGpu()
         const [
           cpuTemp,
           cpuUsage,
           cpuFreq,
           cpuVolt,
+          cpuPower,
           gTemp,
           fSpeed,
-          gpuName,
-          gpuDriverVersion,
-          gpuDriverDate,
-          gpuMemoryTotal,
-          gpuBusWidth,
           gpuUtil,
           gpuMemUtil,
           gpuCoreClock,
@@ -72,13 +108,9 @@ export const useSystemInfoStore = defineStore('systemInfo', {
           CPU.GetCpuUsage(),
           CPU.GetCpuFrequency(),
           CPU.GetCpuVoltage(),
+          CPU.GetCpuPackagePower(),
           NvidiaGpu.GetGpuTemperature(),
           Fan.GetFanSpeed(),
-          NvidiaGpu.GetGpuName(),
-          NvidiaGpu.GetGpuDriverVersion(),
-          NvidiaGpu.GetGpuDriverDate(),
-          NvidiaGpu.GetGpuMemoryTotal(),
-          NvidiaGpu.GetGpuBusWidth(),
           NvidiaGpu.GetGpuUtilization(),
           NvidiaGpu.GetGpuMemoryUtilization(),
           NvidiaGpu.GetGpuCoreClock(),
@@ -93,13 +125,15 @@ export const useSystemInfoStore = defineStore('systemInfo', {
           Temperature: cpuTemp.Success ? cpuTemp.Data : 0,
         }
         this.cpuTemp = cpuTemp.Success ? cpuTemp.Data : 0
+        this.cpuPackagePower = cpuPower.Success ? Number(cpuPower.Data) || 0 : 0
 
+        const prev = this.gpuStats
         this.gpuStats = {
-          GpuName: gpuName.Success ? gpuName.Data : 'N/A',
-          DriverVersion: gpuDriverVersion.Success ? gpuDriverVersion.Data : 'N/A',
-          DriverDate: gpuDriverDate.Success ? gpuDriverDate.Data : 'N/A',
-          MemoryTotal: gpuMemoryTotal.Success ? gpuMemoryTotal.Data : 'N/A',
-          BusWidth: gpuBusWidth.Success ? gpuBusWidth.Data : 'N/A',
+          GpuName: prev?.GpuName || 'N/A',
+          DriverVersion: prev?.DriverVersion || 'N/A',
+          DriverDate: prev?.DriverDate || 'N/A',
+          MemoryTotal: prev?.MemoryTotal || 'N/A',
+          BusWidth: prev?.BusWidth || 'N/A',
           GpuUtilization: gpuUtil.Success ? String(gpuUtil.Data) : '0',
           MemoryUtilization: gpuMemUtil.Success ? String(gpuMemUtil.Data) : '0',
           CoreClock: gpuCoreClock.Success ? String(gpuCoreClock.Data) : '0',
@@ -122,7 +156,8 @@ export const useSystemInfoStore = defineStore('systemInfo', {
     },
 
     startPolling(interval = POLL_INTERVAL_SYSTEM_INFO) {
-      this.fetchSystemInfo()
+      void this.fetchStaticGpu()
+      void this.fetchSystemInfo()
       const polling = setInterval(() => this.fetchSystemInfo(), interval)
       return () => clearInterval(polling)
     },

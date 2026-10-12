@@ -54,6 +54,9 @@ public class AppSection
     [ConfigComment("切换 EC 性能模式时同步 CPU 档位并下发功耗/温度墙 (静音→Saving, 均衡→Default, 性能→Performance)")]
     public bool ApplyCpuProfileOnModeChange { get; set; } = true;
 
+    [ConfigComment("上次使用的瞬时场景: QuietDaily / Portable135 / 空。仅用于下次启动提示，不自动下发")]
+    public string LastPowerScene { get; set; } = "";
+
     [ConfigComment("电池阈值工具目录 (含 NativeEnable.cmd / NativeDisable.cmd), 空则尝试常见路径")]
     public string BatteryThresholdToolDir { get; set; } = "";
 
@@ -108,7 +111,7 @@ public static class CpuProfilePresets
         CpuLongPower = 45,
         CpuShortPower = 60,
         CpuTempWall = 90,
-        CpuMaxFrequency = 4400,
+        CpuMaxFrequency = 4500,
         CpuTurbo = true,
         RecommendedCurveOptimizer = -8,
         SoftSchedule = SoftSchedulePresets.Office()
@@ -410,7 +413,7 @@ public class OsdSection
     [ConfigComment("显示项目: 媒体播放提示 (系统有程序开始播放音乐或切歌时显示曲名与歌手)")]
     public bool ShowMedia { get; set; } = true;
 
-    [ConfigComment("屏蔽 Windows 原生音量弹窗 (接管音量键: 由本程序调整音量并显示自绘 OSD, 需「启用 OSD」开启)")]
+    [ConfigComment("屏蔽 Windows 音量/亮度/媒体浮层 (接管音量键)。启用 OSD 时另会藏起厂家 BLDFnHotkeyUtility 旧 OSD")]
     public bool SuppressNativeVolumeOsd { get; set; } = false;
 
     [ConfigComment("EC 状态轮询间隔 (ms, 事件通道不可用时的兜底)")]

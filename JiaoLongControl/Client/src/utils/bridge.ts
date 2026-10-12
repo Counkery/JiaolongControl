@@ -212,6 +212,7 @@ export interface BridgeApi {
     GetCpuInfo(): HostBridgePromise<CpuInfo>
     GetCpuFrequency(): HostBridgePromise<number>
     GetCpuVoltage(): HostBridgePromise<number>
+    GetCpuPackagePower(): HostBridgePromise<number>
     GetPhysicalCoreCount(): HostBridgePromise<number>
     SetCPUTempWall(tw: number): HostBridgePromise<void>
   }
@@ -470,6 +471,8 @@ export const CPU = {
     cached(CACHE_TTL_MS, 'CPU.GetCpuFrequency', () => call(raw.CPU.GetCpuFrequency())),
   GetCpuVoltage: () =>
     cached(CACHE_TTL_MS, 'CPU.GetCpuVoltage', () => call(raw.CPU.GetCpuVoltage())),
+  GetCpuPackagePower: () =>
+    cached(CACHE_TTL_MS, 'CPU.GetCpuPackagePower', () => call(raw.CPU.GetCpuPackagePower())),
   GetPhysicalCoreCount: () =>
     cached(STATIC_TTL_MS, 'CPU.GetPhysicalCoreCount', () => call(raw.CPU.GetPhysicalCoreCount())),
 }

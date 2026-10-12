@@ -25,6 +25,8 @@ export interface AppSectionType {
   PreferPawnIO: boolean
   /** 切换 EC 性能模式时同步 CPU 档位并下发功耗 */
   ApplyCpuProfileOnModeChange: boolean
+  /** 上次瞬时场景，启动时只提示、不自动套用 */
+  LastPowerScene?: string
   /** 电池阈值外挂工具目录 */
   BatteryThresholdToolDir: string
   /** 主窗口记忆宽度 (物理像素), 0 = 未记忆, 与显示器 DPI/缩放无关 */

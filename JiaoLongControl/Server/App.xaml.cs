@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Windows;
+using JiaoLongControl.Server.Core.Services;
 using JiaoLongControl.Server.Core.Utils;
 using JiaoLongControl.Server.Interop;
 using log4net;
@@ -38,6 +39,13 @@ namespace JiaoLongControl.Server
             }
 
             ConfigSerializer.Initialize(version);
+            Microsoft.Win32.SystemEvents.PowerModeChanged += (_, args) =>
+            {
+                if (args.Mode == Microsoft.Win32.PowerModes.Suspend)
+                    return;
+                // 睡眠唤醒、插拔电源后马上写回频率、软调度、风扇上限、GPU 墙/锁频、Curve Optimizer。
+                Task.Run(() => CpuPowerKeepAliveService.ReapplyProcessorPolicy());
+            };
 
             // 全局异常兜底：任何未处理异常都记录日志，避免闪退后无迹可查
             AppDomain.CurrentDomain.UnhandledException += (_, args) =>

@@ -124,7 +124,7 @@ export function useFanCurveEditor() {
           Message.error(res.Message || '停止失败')
           return false
         }
-        Message.info('温度曲线模式已停止')
+        Message.info(res.Message || '温度曲线已停止，已写回当前模式的转速上限')
       }
       await checkServiceStatus()
       return true

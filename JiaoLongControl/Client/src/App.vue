@@ -49,8 +49,13 @@ watch(
   },
 )
 
+function onVisibility() {
+  systemInfoStore.setPollingPaused(document.hidden)
+}
+
 onMounted(() => {
   stopPolling = systemInfoStore.startPolling()
+  document.addEventListener('visibilitychange', onVisibility)
   window.chrome?.webview?.addEventListener('message', onWebViewMessage)
   // 主动拉取一次配置以尽早应用主题(fetchPromise 去重, 不会与页面内请求重复)
   void configStore.fetchConfig()
@@ -63,6 +68,7 @@ onUnmounted(() => {
   if (stopPolling) {
     stopPolling()
   }
+  document.removeEventListener('visibilitychange', onVisibility)
   window.chrome?.webview?.removeEventListener('message', onWebViewMessage)
 })
 </script>

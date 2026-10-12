@@ -53,6 +53,11 @@ public class AutoFanControl : IDisposable
 
     public CommandResult Start()
     {
+        var scene = Bridge.Instance.CpuPowerKeepAlive.TransientScene;
+        if (string.Equals(scene, "Portable135", StringComparison.Ordinal))
+            return new CommandResult(false, "便携 135W 生效中，软件曲线会绕过转速上限，请先退出该场景");
+        if (string.Equals(scene, "QuietDaily", StringComparison.Ordinal))
+            return new CommandResult(false, "安静日常生效中，软件曲线会绕过转速上限，请先退出该场景");
         if (_isRunning)
             return new CommandResult(true, "自动风扇控制已经运行中");
         _cts = new CancellationTokenSource();
@@ -69,8 +74,30 @@ public class AutoFanControl : IDisposable
 
     public CommandResult Stop()
     {
+        if (!StopLoop())
+            return new CommandResult(true, "自动风扇控制没有在运行中");
+        // 只清掉 Blding 强制转速，再写回当前模式记住的 WMI 上限。
+        // 不要关 FAAP，否则风扇页设过的上限会丢，EC 自己的曲线可能突然变响。
+        try
+        {
+            Bridge.Instance.Fan.ClearForcedSpeed();
+            var ceiling = Bridge.Instance.Fan.ReapplySavedCeiling();
+            return new CommandResult(true, ceiling.Success
+                ? $"软件曲线已停止，{ceiling.Message}"
+                : "软件曲线已停止，但转速上限未能写回");
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"停止曲线后恢复转速上限失败: {ex.Message}");
+            return new CommandResult(true, "软件曲线已停止");
+        }
+    }
+
+    /// <summary>只停曲线线程，不关 FAAP。便携场景用来拆掉强制转速后，由调用方重下发上限。</summary>
+    internal bool StopLoop()
+    {
         if (!_isRunning)
-            return new CommandResult(!_isRunning, "自动风扇控制没有在运行中");
+            return false;
         Logger.Info("Auto Fan Control stopping...");
         _cts?.Cancel();
         try
@@ -85,11 +112,9 @@ public class AutoFanControl : IDisposable
         finally
         {
             _isRunning = false;
-            // 对齐 sakura：停止曲线后写 0 + 关 FAAP，交回 EC 自动
-            try { Bridge.Instance.Fan.RestoreEcAutoFan(); }
-            catch (Exception ex) { Logger.Warn($"停止曲线后交回 EC 失败: {ex.Message}"); }
         }
-        return new CommandResult(true, "自动风扇控制已停止");
+
+        return true;
     }
 
     private void ControlLoop(CancellationToken token)

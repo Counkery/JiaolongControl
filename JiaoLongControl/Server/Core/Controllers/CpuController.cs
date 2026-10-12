@@ -248,6 +248,12 @@ namespace JiaoLongControl.Server.Core.Controllers
         {
             try
             {
+                RefreshLhmSnapshot();
+                if (_cachedCoreFreqMhz is > 200)
+                    return new CommandResult(true, "获取成功", (int)Math.Round(_cachedCoreFreqMhz.Value));
+
+                if (_cpuFreqCounter == null)
+                    return new CommandResult(false, "CPU 频率计数器未就绪", 0);
                 float perfPercent = _cpuFreqCounter.NextValue();
                 int freqMhz = (int)(perfPercent / 100 * GetBaseFrequency());
                 return new CommandResult(true, "获取成功", freqMhz);
@@ -302,46 +308,105 @@ namespace JiaoLongControl.Server.Core.Controllers
         private static LibreHardwareMonitor.Hardware.Computer? _lhmComputer;
         private static readonly object _lhmLock = new();
 
+        private static LibreHardwareMonitor.Hardware.Computer? EnsureLhm()
+        {
+            if (_lhmComputer != null)
+                return _lhmComputer;
+            lock (_lhmLock)
+            {
+                if (_lhmComputer != null)
+                    return _lhmComputer;
+                var computer = new LibreHardwareMonitor.Hardware.Computer
+                {
+                    IsCpuEnabled = true,
+                };
+                computer.Open();
+                _lhmComputer = computer;
+                return _lhmComputer;
+            }
+        }
+
+        /// <summary>CPU Package 功耗（瓦）。LHM 传感器名含 Package。</summary>
+        public CommandResult GetCpuPackagePower()
+        {
+            var watts = ReadPackagePowerFromLhm();
+            if (!watts.HasValue)
+                return new CommandResult(false, "无法读取 CPU 封装功耗", 0d);
+            return new CommandResult(true, "获取成功", Math.Round(watts.Value, 1));
+        }
+
+        private static long _lhmStamp;
+        private static double? _cachedPackagePower;
+        private static double? _cachedVcore;
+        private static double? _cachedCoreFreqMhz;
+        private static uint? _cachedBaseMhz;
+
+        /// <summary>同一轮监控里功耗和电压共用一次硬件刷新。</summary>
+        private static void RefreshLhmSnapshot()
+        {
+            if (Environment.TickCount64 - _lhmStamp < 800)
+                return;
+            var computer = EnsureLhm();
+            if (computer == null)
+                return;
+            double? package = null;
+            double? largestPower = null;
+            var vcoreValues = new List<double>();
+            var coreFreqs = new List<double>();
+            foreach (var hardware in computer.Hardware)
+            {
+                if (hardware.HardwareType != LibreHardwareMonitor.Hardware.HardwareType.Cpu)
+                    continue;
+                hardware.Update();
+                foreach (var sensor in hardware.Sensors)
+                {
+                    if (!sensor.Value.HasValue)
+                        continue;
+                    if (sensor.SensorType == LibreHardwareMonitor.Hardware.SensorType.Power)
+                    {
+                        if (largestPower == null || sensor.Value.Value > largestPower)
+                            largestPower = sensor.Value.Value;
+                        if (sensor.Name.Contains("Package", StringComparison.OrdinalIgnoreCase) ||
+                            sensor.Name.Contains("PPT", StringComparison.OrdinalIgnoreCase))
+                            package ??= sensor.Value.Value;
+                    }
+                    else if (sensor.SensorType == LibreHardwareMonitor.Hardware.SensorType.Voltage &&
+                             (sensor.Name.Contains("Vcore") ||
+                              sensor.Name.Contains("Core") && sensor.Name.Contains("VID")))
+                        vcoreValues.Add(sensor.Value.Value);
+                    else if ((sensor.SensorType == LibreHardwareMonitor.Hardware.SensorType.Clock ||
+                              sensor.SensorType == LibreHardwareMonitor.Hardware.SensorType.Frequency) &&
+                             sensor.Name.Contains("Core", StringComparison.OrdinalIgnoreCase) &&
+                             sensor.Value.Value > 200 && sensor.Value.Value < 10000)
+                        coreFreqs.Add(sensor.Value.Value);
+                }
+            }
+
+            _cachedPackagePower = package ?? largestPower;
+            _cachedCoreFreqMhz = coreFreqs.Count > 0 ? coreFreqs.Average() : null;
+            _cachedVcore = vcoreValues.Count > 0 ? vcoreValues.Average() : null;
+            _lhmStamp = Environment.TickCount64;
+        }
+
+        private static double? ReadPackagePowerFromLhm()
+        {
+            try
+            {
+                RefreshLhmSnapshot();
+                return _cachedPackagePower;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         private static double? ReadCpuVoltageFromLhm()
         {
             try
             {
-                if (_lhmComputer == null)
-                {
-                    lock (_lhmLock)
-                    {
-                        if (_lhmComputer == null)
-                        {
-                            var computer = new LibreHardwareMonitor.Hardware.Computer
-                            {
-                                IsCpuEnabled = true,
-                            };
-                            computer.Open();
-                            _lhmComputer = computer;
-                        }
-                    }
-                }
-
-                var vcoreValues = new List<double>();
-
-                foreach (var hardware in _lhmComputer.Hardware)
-                {
-                    if (hardware.HardwareType != LibreHardwareMonitor.Hardware.HardwareType.Cpu)
-                        continue;
-
-                    hardware.Update();
-
-                    foreach (var sensor in hardware.Sensors)
-                    {
-                        if (sensor.SensorType == LibreHardwareMonitor.Hardware.SensorType.Voltage &&
-                            sensor.Value.HasValue &&
-                            (sensor.Name.Contains("Vcore") || sensor.Name.Contains("Core") && sensor.Name.Contains("VID")))
-                        {
-                            vcoreValues.Add(sensor.Value.Value);
-                        }
-                    }
-                }
-                return vcoreValues.Count > 0 ? vcoreValues.Average() : null;
+                RefreshLhmSnapshot();
+                return _cachedVcore;
             }
             catch
             {
@@ -351,9 +416,14 @@ namespace JiaoLongControl.Server.Core.Controllers
 
         private uint GetBaseFrequency()
         {
+            if (_cachedBaseMhz is > 0)
+                return _cachedBaseMhz.Value;
             using var searcher = new ManagementObjectSearcher("SELECT MaxClockSpeed FROM Win32_Processor");
             foreach (var obj in searcher.Get())
-                return Convert.ToUInt32(obj["MaxClockSpeed"]);
+            {
+                _cachedBaseMhz = Convert.ToUInt32(obj["MaxClockSpeed"]);
+                return _cachedBaseMhz.Value;
+            }
             return 3000;
         }
 
@@ -370,8 +440,8 @@ namespace JiaoLongControl.Server.Core.Controllers
                 var stats = new CpuStatsInfo();
                 stats.Temperature = MethodServices.GetValue<byte>(MethodName.CPUThermometer);
                 stats.Usage = _cpuCounter != null ? (int)_cpuCounter.NextValue() : 0;
-                float perfPercent = _cpuFreqCounter != null ? _cpuFreqCounter.NextValue() : 100f;
-                stats.FrequencyMhz = (int)(perfPercent / 100 * GetBaseFrequency());
+                var freq = GetCpuFrequency();
+                stats.FrequencyMhz = freq.Success && freq.Data is int mhz ? mhz : 0;
                 var voltage = ReadCoreVoltage();
                 if (voltage.HasValue)
                 {

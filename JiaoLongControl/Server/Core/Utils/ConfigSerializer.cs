@@ -34,6 +34,7 @@ public static class ConfigSerializer
 
     // 自该版本起为三档写入 SoftSchedule（EPP / CPMIN / Boost，AC·DC）。
     private static readonly Version SoftScheduleVersion = new("10.19.38");
+    private static readonly Version OfficeSweetSpotVersion = new("10.19.53");
 
     public static string ConfigDir { get; set; } = Path.Combine(AppContext.BaseDirectory, "config");
     public static string ConfigPath => Path.Combine(ConfigDir, FileName);
@@ -148,6 +149,14 @@ public static class ConfigSerializer
             LowConfig.Cpu.Default.SoftSchedule = SoftSchedulePresets.Game();
             LowConfig.Cpu.Performance.SoftSchedule = SoftSchedulePresets.Productivity();
             LowConfig.Cpu.Custom.SoftSchedule ??= SoftSchedulePresets.Game();
+        }
+
+        // 升级到 10.19.53+：办公档若仍是旧默认 4400/45W，收到 4500。其它手调频率不动。
+        if (!Version.TryParse(LowConfig.Version, out oldVersion) || oldVersion < OfficeSweetSpotVersion)
+        {
+            var saving = LowConfig.Cpu.Saving;
+            if (saving.CpuMaxFrequency == 4400 && saving.CpuLongPower == 45)
+                saving.CpuMaxFrequency = 4500;
         }
 
         // 默认无损迁移

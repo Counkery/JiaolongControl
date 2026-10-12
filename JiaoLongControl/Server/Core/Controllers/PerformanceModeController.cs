@@ -82,7 +82,7 @@ namespace JiaoLongControl.Server.Core.Controllers
                 var targetLong = (byte)78;
                 var targetShort = (byte)108;
                 var targetWall = (byte)93;
-                var targetFreq = 5150u;
+                var targetFreq = 4750u;
                 var soft = SoftSchedulePresets.QuietDaily();
 
                 var r1 = bridge.CPU.SetCpuLongPower(targetLong);
@@ -126,7 +126,7 @@ namespace JiaoLongControl.Server.Core.Controllers
                 }
 
                 string msg = ok
-                    ? "已应用安静日常：均衡 + 上限 3500 RPM + 78/108W / 墙 93℃ + 软调度（未改游戏档配置）"
+                    ? "已应用安静日常：均衡 + 上限 3500 RPM + 78/108W / 墙 93℃ / 频率 4750 + 软调度（未改游戏档配置）"
                     : heldPortable
                         ? "安静日常未写入，已保持便携 135W，没有拉回高功耗。"
                         : $"部分失败: 上限={ceil.Success}, L={r1.Success}, S={r2.Success}, T={r3.Success}, Freq={freq.Success}, Soft={softRes.Success}";
@@ -244,7 +244,7 @@ namespace JiaoLongControl.Server.Core.Controllers
         }
 
         /// <summary>安静日常失败时保住便携 135W，避免 GPU/CPU 被拉回高功耗档。</summary>
-        private static void HoldPortable135(Bridge bridge)
+        internal static void HoldPortable135(Bridge bridge)
         {
             try
             {

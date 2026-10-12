@@ -1,3 +1,4 @@
+using JiaoLongControl.Server.Core.Controllers;
 using JiaoLongControl.Server.Core.Models;
 using JiaoLongControl.Server.Core.Utils;
 using JiaoLongControl.Server.Interop;
@@ -193,6 +194,7 @@ public sealed class CpuPowerKeepAliveService : IDisposable
         // 启动后稍等，避免与 SelfStart 首次下发撞车
         token.WaitHandle.WaitOne(5000);
 
+        int portableTicks = 0;
         while (!token.IsCancellationRequested)
         {
             try
@@ -203,6 +205,29 @@ public sealed class CpuPowerKeepAliveService : IDisposable
                     continue;
                 }
 
+                bool portable = string.Equals(TransientScene, "Portable135", StringComparison.Ordinal);
+                if (portable)
+                {
+                    // 热键把 EC 模式拨走之后，事件若迟到，最多约 2 秒拉回办公并压住 GPU/频率。
+                    OsdController.Instance?.ReassertPortableMode();
+                    if (Bridge.Instance.AutoFan.StopLoop())
+                    {
+                        Logger.Info("便携 135W 期间软件曲线被重新打开，已停止并恢复转速上限");
+                        Bridge.Instance.Fan.SetFanCeilingRpm(2700);
+                    }
+                    portableTicks++;
+                    if (portableTicks == 1 || portableTicks % 15 == 0)
+                    {
+                        SyncFromConfig();
+                        ReapplyLatest();
+                        PerformanceModeController.HoldPortable135(Bridge.Instance);
+                    }
+
+                    token.WaitHandle.WaitOne(2000);
+                    continue;
+                }
+
+                portableTicks = 0;
                 SyncFromConfig();
                 ReapplyLatest();
                 token.WaitHandle.WaitOne(Math.Clamp(IntervalMs, 5_000, 120_000));
@@ -254,6 +279,10 @@ public sealed class CpuPowerKeepAliveService : IDisposable
 
     private static void Reapply(byte longP, byte shortP, byte wall)
     {
+        // 频率上限和软调度写在当前电源方案里，Windows 一切换电源模式就会丢。
+        // 与功耗墙一起周期写回。便携场景的 GPU 60W 由 HoldPortable135 负责，这里不拉回高档。
+        ReapplyProcessorPolicy();
+
         var cpu = Bridge.Instance.CPU;
         if (!cpu.IsAcReadyForCustomMode())
         {
@@ -280,6 +309,80 @@ public sealed class CpuPowerKeepAliveService : IDisposable
         else
         {
             Logger.Debug($"CPU 功耗重应用成功: L={longP} S={shortP} T={wall}");
+        }
+    }
+
+    /// <summary>电源方案被 Windows 改掉后，把频率上限、软调度、GPU 功耗墙写回去。</summary>
+    internal static void ReapplyProcessorPolicy()
+    {
+        try
+        {
+            var bridge = Bridge.Instance;
+            var keep = bridge.CpuPowerKeepAlive;
+            var profile = bridge.Config.Cpu.Active;
+            var soft = keep.GetEffectiveSoftSchedule(profile.SoftSchedule);
+            bool turbo = keep.HasTransientOverride || profile.CpuTurbo;
+            bridge.Power.ApplySoftSchedule(soft, turbo);
+
+            string? scene = keep.TransientScene;
+            uint mhz = scene switch
+            {
+                "Portable135" => 4500,
+                "QuietDaily" => 4750,
+                _ => profile.CpuMaxFrequency
+            };
+            if (mhz == 0)
+                bridge.Power.ResetCPUMaxFrequency();
+            else
+                bridge.Power.SetCPUMaxFrequency(mhz);
+
+            if (!string.Equals(scene, "Portable135", StringComparison.Ordinal))
+            {
+                int gpuWatts = bridge.Config.Gpu.PowerLimit;
+                if (gpuWatts > 0)
+                    bridge.NvidiaGpu.SetPowerLimit(gpuWatts);
+            }
+
+            // 风扇上限：EC 睡眠后会忘掉。软件曲线运行时不要写，避免拆掉强制转速。
+            var fanRunning = bridge.AutoFan.IsRunning();
+            if (!(fanRunning.Success && fanRunning.Data is true))
+                bridge.Fan.ReapplySavedCeiling();
+
+            var app = bridge.Config.App;
+            var gpu = bridge.Config.Gpu;
+            if (app.BootAdvancedGPUSystem)
+            {
+                if (app.BootGpuUseAdvancedOffsets)
+                {
+                    if (gpu.CoreClockOffsetMhz != 0 || gpu.MemoryClockOffsetMhz != 0)
+                        bridge.NvidiaGpu.SetGpuOffsets(gpu.CoreClockOffsetMhz, gpu.MemoryClockOffsetMhz);
+                }
+                else
+                {
+                    if (gpu.GpuClock > 0)
+                        bridge.NvidiaGpu.LockGpuClock(gpu.GpuClock);
+                    if (gpu.MemoryClock > 0)
+                        bridge.NvidiaGpu.LockMemoryClock(gpu.MemoryClock);
+                }
+            }
+
+            if (app.BootSetRyzenSumCurveOptimizerAll)
+            {
+                if (app.BootSetRyzenSmuCurveOptimizerPerCore)
+                {
+                    var perCore = bridge.Config.Smu.CurveOptimizerPerCore;
+                    for (int i = 0; i < perCore.Count; i++)
+                        bridge.RyzenSmu.SetCurveOptimizerPerCore((uint)i, perCore[i]);
+                }
+                else
+                {
+                    bridge.RyzenSmu.SetCurveOptimizerAll(bridge.Config.Smu.CurveOptimizerAll);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"电源策略重应用失败: {ex.Message}");
         }
     }
 }

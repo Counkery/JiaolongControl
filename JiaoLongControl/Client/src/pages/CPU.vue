@@ -2,7 +2,7 @@
 import CpuDie from '@/components/common/CpuDie.vue'
 
 import {computed, onMounted, onUnmounted, ref} from 'vue'
-import {Message} from '@arco-design/web-vue'
+import {Message, Modal} from '@arco-design/web-vue'
 import {CPU, type CpuInfo, PerformanceMode, Power, RyzenSmu} from '@/utils/bridge.ts'
 import type {SoftScheduleDataType} from '@/types/config'
 import {useConfigStore} from '@/stores/config'
@@ -172,6 +172,30 @@ async function applyFrequencyNow(value?: number | [number, number]) {
 
 async function handleApplyAll() {
   if (!CPUData.value || !activeProfile.value) return
+  try {
+    const scene = await PerformanceMode.GetQuietDailyActive()
+    if (scene.Success && scene.Data?.Scene === 'Portable135') {
+      const leave = await new Promise<boolean>((resolve) => {
+        let settled = false
+        const finish = (ok: boolean) => {
+          if (settled) return
+          settled = true
+          resolve(ok)
+        }
+        Modal.confirm({
+          title: '退出便携 135W',
+          content: '应用当前 CPU 档会恢复更高功耗，并把显卡功耗墙写回配置值。135W 电源可能跳保护。',
+          okText: '仍然应用',
+          cancelText: '保持便携',
+          onOk: () => finish(true),
+          onCancel: () => finish(false),
+        })
+      })
+      if (!leave) return
+    }
+  } catch {
+    /* 读不到场景时仍允许应用 */
+  }
   loading.value = true
   try {
     const failures: string[] = []

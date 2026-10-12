@@ -5,8 +5,8 @@ import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { LineChart } from 'echarts/charts'
 import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
-import { Message } from '@arco-design/web-vue'
-import { PerformanceMode, Power, SystemInfo, SystemPerMode } from '@/utils/bridge'
+import { Message, Modal } from '@arco-design/web-vue'
+import { AutoFanControl, Fan, PerformanceMode, Power, SystemInfo, SystemPerMode } from '@/utils/bridge'
 import { useConfigStore } from '@/stores/config'
 import { useSystemInfoStore } from '@/stores/systemInfo'
 import { chartTheme } from '@/theme/theme'
@@ -25,7 +25,8 @@ use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent
 
 const systemInfoStore = useSystemInfoStore()
 const configStore = useConfigStore()
-const { cpuTemp, gpuTemp, fanSpeed, gpuStats, cpuStats } = storeToRefs(systemInfoStore)
+const { cpuTemp, gpuTemp, fanSpeed, gpuStats, cpuStats, cpuPackagePower } =
+  storeToRefs(systemInfoStore)
 
 const performanceModes = ref([
   { id: SystemPerMode.QuietMode, name: '静音', icon: iconQuiet, active: false },
@@ -50,23 +51,101 @@ async function fetchPerformanceMode() {
   }
 }
 
-function setMode(id: SystemPerMode) {
-  performanceModes.value.forEach((m) => {
-    m.active = m.id === id
+const activeScene = ref<string | null>(null)
+const fanPathText = ref('风扇：读取中')
+const scenePromptDismissed = ref(false)
+
+function sceneLabel(scene: string | null) {
+  if (scene === 'Portable135') return '便携 135W'
+  if (scene === 'QuietDaily') return '安静日常'
+  return ''
+}
+
+async function refreshScene() {
+  try {
+    const res = await PerformanceMode.GetQuietDailyActive()
+    activeScene.value = res.Success && res.Data?.Active ? res.Data.Scene || 'QuietDaily' : null
+  } catch {
+    activeScene.value = null
+  }
+}
+
+async function refreshFanPath() {
+  try {
+    const [running, ceiling] = await Promise.all([
+      AutoFanControl.IsRunning(),
+      Fan.GetFanCeilingRpm(),
+    ])
+    if (running.Success && running.Data) {
+      fanPathText.value = '风扇：软件曲线（强制转速）'
+      return
+    }
+    if (ceiling.Success && ceiling.Data?.Enabled) {
+      fanPathText.value = `风扇：WMI 上限 ${ceiling.Data.Rpm} RPM`
+      return
+    }
+    fanPathText.value = '风扇：EC 自动'
+  } catch {
+    fanPathText.value = '风扇：状态未知'
+  }
+}
+
+function confirmLeavePortable(nextLabel: string) {
+  if (activeScene.value !== 'Portable135') return Promise.resolve(true)
+  return new Promise<boolean>((resolve) => {
+    let settled = false
+    const finish = (ok: boolean) => {
+      if (settled) return
+      settled = true
+      resolve(ok)
+    }
+    Modal.confirm({
+      title: '退出便携 135W',
+      content: `切换到「${nextLabel}」会恢复更高的 CPU / GPU 功耗，135W 电源可能跳保护。`,
+      okText: '仍然切换',
+      cancelText: '保持便携',
+      onOk: () => finish(true),
+      onCancel: () => finish(false),
+    })
   })
-  PerformanceMode.Set(id)
+}
+
+async function rememberScene(scene: string) {
+  if (!configStore.config) return
+  configStore.config.App.LastPowerScene = scene
+  try {
+    await configStore.saveConfig()
+  } catch {
+    /* 提示用，失败不影响已经下发的硬件 */
+  }
+}
+
+function setMode(id: SystemPerMode) {
+  const mode = performanceModes.value.find((m) => m.id === id)
+  void (async () => {
+    const ok = await confirmLeavePortable(mode?.name || '其它模式')
+    if (!ok) return
+    performanceModes.value.forEach((m) => {
+      m.active = m.id === id
+    })
+    await PerformanceMode.Set(id)
+    await refreshScene()
+  })()
 }
 
 const quietDailyLoading = ref(false)
 const portable135Loading = ref(false)
 async function applyQuietDaily() {
+  const ok = await confirmLeavePortable('安静日常')
+  if (!ok) return
   quietDailyLoading.value = true
   try {
     const res = await PerformanceMode.ApplyQuietDaily()
     if (res.Success) {
       Message.success(res.Message || '已应用安静日常')
+      await rememberScene('QuietDaily')
       await fetchPerformanceMode()
-      // 同模式再点「均衡」不会退出；切模式或 CPU 页应用才会结束瞬时会话
+      await refreshScene()
     } else {
       Message.error(res.Message || '应用失败')
     }
@@ -83,7 +162,9 @@ async function applyPortable135() {
     const res = await PerformanceMode.ApplyPortable135()
     if (res.Success) {
       Message.success(res.Message || '已应用便携 135W')
+      await rememberScene('Portable135')
       await fetchPerformanceMode()
+      await refreshScene()
     } else {
       Message.error(res.Message || '应用失败')
     }
@@ -183,26 +264,14 @@ const tempHistory = ref<{ cpu: number | null; gpu: number | null }[]>(
   Array(10).fill({ cpu: null, gpu: null }),
 )
 
-// 心电图数据与生成逻辑
-const ecgData = ref<number[]>(Array(50).fill(30))
-let ecgIndex = 0
-const ecgPattern = [0, 0, 0, 0, -2, 2, -25, 12, -2, -6, 0, 0, 0, 0, 0, 0]
+const powerHistory = ref<number[]>(Array(24).fill(0))
 
-function tickEcg() {
-  const offset = ecgPattern[ecgIndex] ?? 0
-  ecgIndex = (ecgIndex + 1) % ecgPattern.length
-  const noise = (Math.random() - 0.5) * 1.5
-  const nextY = 30 + offset + noise
-  ecgData.value.push(nextY)
-  if (ecgData.value.length > 50) {
-    ecgData.value.shift()
-  }
-}
-
-const ecgPointsString = computed(() => {
-  return ecgData.value
-    .map((y, i) => {
-      const x = (i / (ecgData.value.length - 1)) * 300
+const powerPointsString = computed(() => {
+  const max = Math.max(40, ...powerHistory.value)
+  return powerHistory.value
+    .map((w, i) => {
+      const x = (i / (powerHistory.value.length - 1)) * 300
+      const y = 54 - (w / max) * 46
       return `${x.toFixed(1)},${y.toFixed(1)}`
     })
     .join(' ')
@@ -222,26 +291,28 @@ async function fetchStaticInfo() {
   }
 }
 
-let ecgTimer: ReturnType<typeof setInterval> | null = null
 let historyTimer: ReturnType<typeof setInterval> | null = null
+let fanTimer: ReturnType<typeof setInterval> | null = null
 
 function startTimers() {
   stopTimers()
-  ecgTimer = setInterval(tickEcg, 100)
   historyTimer = setInterval(() => {
     tempHistory.value.push({ cpu: cpuTemp.value, gpu: gpuTemp.value })
     if (tempHistory.value.length > 10) tempHistory.value.shift()
+    powerHistory.value.push(cpuPackagePower.value || 0)
+    if (powerHistory.value.length > 24) powerHistory.value.shift()
   }, 2000)
+  fanTimer = setInterval(() => void refreshFanPath(), 5000)
 }
 
 function stopTimers() {
-  if (ecgTimer) {
-    clearInterval(ecgTimer)
-    ecgTimer = null
-  }
   if (historyTimer) {
     clearInterval(historyTimer)
     historyTimer = null
+  }
+  if (fanTimer) {
+    clearInterval(fanTimer)
+    fanTimer = null
   }
 }
 
@@ -253,16 +324,46 @@ function handleVisibilityChange() {
   }
 }
 
+function onSceneChanged() {
+  void refreshScene()
+}
+
+const suggestedScene = computed(() => configStore.config?.App.LastPowerScene || '')
+const showScenePrompt = computed(
+  () =>
+    !scenePromptDismissed.value &&
+    !activeScene.value &&
+    (suggestedScene.value === 'Portable135' || suggestedScene.value === 'QuietDaily'),
+)
+
+async function applySuggestedScene() {
+  if (suggestedScene.value === 'Portable135') await applyPortable135()
+  else if (suggestedScene.value === 'QuietDaily') await applyQuietDaily()
+  scenePromptDismissed.value = true
+}
+
+function dismissScenePrompt() {
+  scenePromptDismissed.value = true
+  if (configStore.config) {
+    configStore.config.App.LastPowerScene = ''
+    void configStore.saveConfig()
+  }
+}
+
 onMounted(() => {
   fetchStaticInfo()
   fetchPerformanceMode()
+  void refreshScene()
+  void refreshFanPath()
   startTimers()
   document.addEventListener('visibilitychange', handleVisibilityChange)
+  window.addEventListener('jiaolong-quiet-daily-changed', onSceneChanged)
 })
 
 onUnmounted(() => {
   stopTimers()
   document.removeEventListener('visibilitychange', handleVisibilityChange)
+  window.removeEventListener('jiaolong-quiet-daily-changed', onSceneChanged)
 })
 
 // 2. 温度曲线 - 折线图
@@ -326,6 +427,35 @@ const lineChartOption = computed(() => ({
       :active-mode-icon="activeMode.icon"
     />
 
+    <div
+      v-if="activeScene"
+      class="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-[12px] text-amber-100"
+    >
+      当前场景：{{ sceneLabel(activeScene) }}。切到其它性能模式或在 CPU 页点「应用」会退出；若正在用便携电源，退出前会再确认一次。
+    </div>
+    <div
+      v-else-if="showScenePrompt"
+      class="rounded-2xl border border-ink/10 bg-ink/[0.03] px-4 py-3 flex flex-wrap items-center justify-between gap-3"
+    >
+      <p class="text-[12px] text-gray-300">
+        上次使用了「{{ sceneLabel(suggestedScene) }}」。适配器瓦数读不到，不会自动套用。
+      </p>
+      <div class="flex gap-2">
+        <button
+          class="text-[11px] px-3 py-1.5 rounded-lg bg-purple-600/80 text-white"
+          @click="applySuggestedScene"
+        >
+          套用
+        </button>
+        <button
+          class="text-[11px] px-3 py-1.5 rounded-lg border border-ink/10 text-gray-300"
+          @click="dismissScenePrompt"
+        >
+          不再提示
+        </button>
+      </div>
+    </div>
+
     <!-- Row 2: 模式 & 监控 -->
     <div class="grid grid-cols-12 gap-3 min-h-[260px] h-[290px] min-w-0">
       <PerformanceModeComp
@@ -343,18 +473,21 @@ const lineChartOption = computed(() => ({
         :gpu-temp="gpuTemp"
         :cpu-freq-mhz="cpuStats?.FrequencyMhz ?? 0"
         :gpu-freq-mhz="gpuCoreMhz"
+        :cpu-package-watts="cpuPackagePower"
       />
     </div>
 
     <div class="glass-card px-5 py-4 space-y-3 min-w-0">
       <div class="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h2 class="text-[15px] font-medium text-ink/90">CPU 频率上限</h2>
-          <p class="text-[11px] text-gray-500 mt-0.5">
-            当前约 {{ liveFreqGhz }} GHz。写入当前电源方案，并记到正在使用的 CPU 档。0 表示不限制。
+          <h2 class="text-[15px] font-medium text-ink/90">CPU 频率</h2>
+          <p class="text-[12px] text-gray-300 mt-0.5 font-mono">
+            当前 {{ liveFreqGhz }} GHz
+            <span class="text-gray-500"> / </span>
+            上限 {{ freqLabel }}
           </p>
         </div>
-        <span class="text-purple-400 font-mono text-sm">{{ freqLabel }}</span>
+        <span class="text-[11px] text-gray-500">写入当前电源方案，并记到正在使用的 CPU 档</span>
       </div>
       <div class="flex flex-wrap gap-2">
         <button
@@ -458,11 +591,12 @@ const lineChartOption = computed(() => ({
               <span class="text-xs text-gray-400">RPM</span>
             </div>
             <div class="text-xs text-gray-500">风扇转速</div>
+            <div class="text-[11px] text-gray-400 mt-1">{{ fanPathText }}</div>
           </div>
         </div>
 
-        <!-- 模拟心电图 (ECG) -->
-        <div class="h-16 flex items-center justify-center mb-6 overflow-hidden">
+        <div class="text-[11px] text-gray-500 mb-1">CPU 封装功耗</div>
+        <div class="h-16 flex items-center justify-center mb-4 overflow-hidden">
           <svg class="w-full h-full" viewBox="0 0 300 60" preserveAspectRatio="none">
             <defs>
               <!-- 水平方向渐变色，从紫色过渡到蓝色，再到浅绿 -->
@@ -487,7 +621,7 @@ const lineChartOption = computed(() => ({
               stroke-linecap="round"
               stroke-linejoin="round"
               filter="url(#glow)"
-              :points="ecgPointsString"
+              :points="powerPointsString"
             />
           </svg>
         </div>

@@ -118,6 +118,7 @@ namespace JiaoLongControl.Server.Core.Controllers
             try
             {
                 if (_hook != IntPtr.Zero) User32.UnhookWindowsHookEx(_hook);
+                NativeOsdSuppressor.Stop();
             }
             catch
             {
@@ -148,6 +149,7 @@ namespace JiaoLongControl.Server.Core.Controllers
                     User32.WH_KEYBOARD_LL, _proc, User32.GetModuleHandleW(null), 0);
                 if (_hook == IntPtr.Zero)
                     Logger.Warn($"OSD 键盘钩子安装失败 (Win32Error={Marshal.GetLastWin32Error()})");
+                NativeOsdSuppressor.Start();
             }
             catch (Exception ex)
             {
@@ -609,8 +611,97 @@ namespace JiaoLongControl.Server.Core.Controllers
             if (mode == SystemPerMode.Unknow) return;                 // 读取失败, 跳过
             if (!_lastPerf.HasValue) { _lastPerf = mode; return; }    // 首次有效读取仅作基线
             if (mode == _lastPerf.Value) return;
+            if (TryKeepPortable135(mode))
+                return;
             _lastPerf = mode;
             OnPerformanceModeChanged(mode);
+        }
+
+        private long _portableHoldTick;
+
+        /// <summary>便携场景下若 EC 模式已漂离办公，立刻拉回。模式仍是办公时不做任何写入。</summary>
+        internal void ReassertPortableMode()
+        {
+            string? scene;
+            try
+            {
+                scene = Bridge.Instance.CpuPowerKeepAlive.TransientScene;
+            }
+            catch
+            {
+                return;
+            }
+
+            if (!string.Equals(scene, "Portable135", StringComparison.Ordinal))
+                return;
+            var mode = MethodServices.GetValue<SystemPerMode>(MethodName.SystemPerMode);
+            if (mode == SystemPerMode.QuietMode || mode == SystemPerMode.Unknow)
+                return;
+            TryKeepPortable135(mode);
+        }
+
+
+        /// <summary>
+        /// 便携 135W 期间，FN/EC 热键切走模式不会弹确认框。
+        /// 把 EC 模式拉回办公，并重新压住 GPU/频率，避免小电源跳保护。
+        /// </summary>
+        private bool TryKeepPortable135(SystemPerMode incoming)
+        {
+            string? scene;
+            try
+            {
+                scene = Bridge.Instance.CpuPowerKeepAlive.TransientScene;
+            }
+            catch
+            {
+                return false;
+            }
+
+            if (!string.Equals(scene, "Portable135", StringComparison.Ordinal))
+                return false;
+            if (incoming == SystemPerMode.QuietMode)
+                return false;
+
+            long now = Environment.TickCount64;
+            if (now - _portableHoldTick < 1500)
+                return true;
+            _portableHoldTick = now;
+
+            BeginSuppressModeBindings();
+            try
+            {
+                MethodServices.SetValue(MethodName.SystemPerMode, SystemPerMode.QuietMode);
+                NoteExpectedPerfMode(SystemPerMode.QuietMode);
+                PerformanceModeController.HoldPortable135(Bridge.Instance);
+                try
+                {
+                    Bridge.Instance.Fan.SetFanCeilingRpm(2700);
+                }
+                catch
+                {
+                    /* 上限写失败时 GPU/频率仍保持 */
+                }
+            }
+            finally
+            {
+                EndSuppressModeBindings();
+            }
+
+            var cfg = Bridge.Instance.Config.Osd;
+            if (cfg.Enabled)
+            {
+                ShowOnWindow(new OsdItem
+                {
+                    Kind = "perf",
+                    IconGlyph = "\uE706",
+                    AccentHex = "#F59E0B",
+                    Title = "便携 135W",
+                    Subtitle = "热键已拦截，未提高功耗",
+                    BarValue = null,
+                }, cfg);
+            }
+
+            return true;
         }
 
         private void DetectKeyboardBrightness()
