@@ -93,6 +93,8 @@ namespace JiaoLongControl.Server.Core.Controllers
                 _mediaPollTimer?.Stop();
                 _pollCts?.Cancel();
                 _displayBrightCts?.Cancel();
+                try { DisplayBrightness.Changed -= OnDisplayBrightnessChanged; }
+                catch { /* ignore */ }
             }
             catch
             {
@@ -169,8 +171,8 @@ namespace JiaoLongControl.Server.Core.Controllers
                 StartStatePolling();
             }
 
-            // 屏幕亮度不在 HID_EVENT20 内, 无论事件通道是否可用都独立轮询
-            StartDisplayBrightnessPolling();
+            // 屏幕亮度: 优先 WmiMonitorBrightnessEvent 即时通知, 失败再 50ms 快轮询
+            StartDisplayBrightnessWatch();
 
             // 系统媒体会话监视 (音乐开始播放/切歌时提示); 初始化失败仅记录, 不影响其它链路
             StartMediaWatcher();
@@ -451,8 +453,15 @@ namespace JiaoLongControl.Server.Core.Controllers
             }, cfg);
         }
 
-        private void StartDisplayBrightnessPolling()
+        private void StartDisplayBrightnessWatch()
         {
+            // 先记基线, 避免启动瞬间误弹
+            _lastScreenBrightness ??= DisplayBrightness.TryGetPercent();
+
+            DisplayBrightness.Changed -= OnDisplayBrightnessChanged;
+            DisplayBrightness.Changed += OnDisplayBrightnessChanged;
+
+            // 事件订阅失败时用 50ms 快轮询逼近原生手感; 成功则只做低频对账
             if (_displayBrightTask != null) return;
             _displayBrightCts = new CancellationTokenSource();
             var token = _displayBrightCts.Token;
@@ -464,9 +473,12 @@ namespace JiaoLongControl.Server.Core.Controllers
                         try
                         {
                             var cfg = Bridge.Instance.Config.Osd;
+                            int waitMs = DisplayBrightness.IsEventWatching
+                                ? Math.Clamp(cfg.PollIntervalMs, 500, 5000)
+                                : 50;
                             if (cfg.Enabled && cfg.ShowScreenBrightness)
                                 DetectScreenBrightness();
-                            token.WaitHandle.WaitOne(Math.Clamp(cfg.PollIntervalMs, 500, 5000));
+                            token.WaitHandle.WaitOne(waitMs);
                         }
                         catch (OperationCanceledException)
                         {
@@ -484,19 +496,35 @@ namespace JiaoLongControl.Server.Core.Controllers
                 TaskScheduler.Default);
         }
 
+        private void OnDisplayBrightnessChanged(int percent) =>
+            HandleScreenBrightnessChange(percent);
+
         private void DetectScreenBrightness()
         {
             var percent = DisplayBrightness.TryGetPercent();
-            if (!percent.HasValue) return;
+            if (percent.HasValue)
+                HandleScreenBrightnessChange(percent.Value);
+        }
+
+        private void HandleScreenBrightnessChange(int percent)
+        {
+            percent = Math.Clamp(percent, 0, 100);
             if (!_lastScreenBrightness.HasValue)
             {
-                _lastScreenBrightness = percent.Value;
+                _lastScreenBrightness = percent;
                 return;
             }
 
-            if (percent.Value == _lastScreenBrightness.Value) return;
-            _lastScreenBrightness = percent.Value;
-            DebounceShow("display", () => ShowScreenBrightnessOsd(percent.Value, force: false));
+            if (percent == _lastScreenBrightness.Value) return;
+            _lastScreenBrightness = percent;
+
+            var cfg = Bridge.Instance.Config.Osd;
+            if (!cfg.Enabled || !cfg.ShowScreenBrightness) return;
+            // 已驻留时原位刷新; 否则立即弹出 (跳过音量键那套 120ms 防抖, 贴近原生速度)
+            var p = percent;
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null) return;
+            dispatcher.BeginInvoke(() => ShowScreenBrightnessOsd(p, force: false));
         }
 
         /// <summary>

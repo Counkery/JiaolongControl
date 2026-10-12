@@ -165,7 +165,7 @@ onMounted(() => {
           />
           <SettingToggle
             config-path="Osd.ShowScreenBrightness"
-            description="按下屏幕亮度增减键时，显示亮度条与百分比（经 WMI 轮询检测；开启「屏蔽系统与厂家旧 OSD」后由本胶囊接替系统亮度浮层）。停留期间可拖动进度条调节"
+            description="按下屏幕亮度增减键时，显示亮度条与百分比（优先订阅 WMI 亮度事件，接近系统原生速度；开启「屏蔽系统与厂家旧 OSD」后由本胶囊接替系统亮度浮层）。停留期间可拖动进度条调节"
             title="屏幕亮度"
           />
           <SettingToggle
