@@ -26,10 +26,13 @@ namespace JiaoLongControl.Server
     /// </summary>
     public partial class OsdWindow : Window
     {
-        // 布局基准 (DIP): 窗口 440x140, 胶囊 336x40, 胶囊相对窗口居中偏移
-        private const double WinW = 440, WinH = 140, PillW = 336, PillH = 40;
+        // 布局基准 (DIP): 窗口 440x140；交互型胶囊 336x40，锁定/触摸板等状态型用短胶囊
+        private const double WinW = 440, WinH = 140, PillFullW = 336, PillCompactW = 168, PillH = 40;
 
-        private const double OffsetX = (WinW - PillW) / 2, OffsetY = (WinH - PillH) / 2;
+        private const double OffsetY = (WinH - PillH) / 2;
+
+        // 当前胶囊目标宽度 (按 Kind 在 ShowOsd 时选定)
+        private double _pillW = PillFullW;
 
         // 退场基准编排总时长: 实际时长 = 显示时长, 各关键帧按 显示时长/620 等比缩放
         private const int ExitMs = 620;
@@ -180,18 +183,25 @@ namespace JiaoLongControl.Server
                 IconImage.Visibility = iconSource != null ? Visibility.Visible : Visibility.Collapsed;
                 IconGlyph.Visibility = iconSource != null ? Visibility.Collapsed : Visibility.Visible;
 
+                // 锁定键 / 触摸板 / Fn 锁仅有图标+两行字, 用短胶囊; 音量/亮度/背光/媒体/模式用满宽
+                _pillW = IsCompactKind(item.Kind) ? PillCompactW : PillFullW;
+
                 var scale = Math.Clamp(cfg.Scale, 100, 200) / 100.0;
                 ApplyLayoutScale(scale);
                 MoveToTarget(cfg.Position, cfg.CustomX, cfg.CustomY, _uiScale);
 
                 // 交互控件切换 (依赖缩放后的基准尺寸, 故放在 ApplyLayoutScale 之后)
-                var interactive = item.Kind is "volume" or "keyboard" or "media";
-                VolumePanel.Visibility = item.Kind == "volume" ? Visibility.Visible : Visibility.Collapsed;
+                var interactive = item.Kind is "volume" or "display" or "keyboard" or "media";
+                var showVolumeBar = item.Kind is "volume" or "display";
+                VolumePanel.Visibility = showVolumeBar ? Visibility.Visible : Visibility.Collapsed;
+                MuteButton.Visibility = item.Kind == "volume" ? Visibility.Visible : Visibility.Collapsed;
                 BrightnessPanel.Visibility = item.Kind == "keyboard" ? Visibility.Visible : Visibility.Collapsed;
                 MediaPanel.Visibility = item.Kind == "media" ? Visibility.Visible : Visibility.Collapsed;
+                BarPanel.Visibility = interactive ? Visibility.Visible : Visibility.Collapsed;
                 switch (item.Kind)
                 {
                     case "volume":
+                    case "display":
                         VolumeFill.Width = _barWidth * Math.Clamp(item.BarValue ?? 0, 0, 1);
                         MuteGlyph.Text = item.IsMuted ? "\uE74F" : "\uE767";
                         break;
@@ -259,14 +269,16 @@ namespace JiaoLongControl.Server
             Height = WinH * scale;
             Halo.Width = 400 * scale;
             Halo.Height = 120 * scale;
-            Pill.Width = PillW * scale;
+            Pill.Width = _pillW * scale;
             Pill.Height = PillH * scale;
             Pill.CornerRadius = new CornerRadius(PillH * scale / 2);
             HoverGlow.CornerRadius = new CornerRadius(PillH * scale / 2);
             // 圆形光源: 绝对半径 = 胶囊高度一半 (居中时恰好完整容纳于胶囊内)
             HoverGlowBrush.RadiusX = PillH * scale / 2;
             HoverGlowBrush.RadiusY = PillH * scale / 2;
-            ContentGrid.Margin = new Thickness(14 * scale, 0, 14 * scale, 0);
+            // 短胶囊略收左右内边距, 避免文字显得拥挤又浪费宽度
+            var sidePad = IsCompactKind(CurrentKind) ? 12 : 14;
+            ContentGrid.Margin = new Thickness(sidePad * scale, 0, sidePad * scale, 0);
             IconBox.Width = 26 * scale;
             IconBox.Height = 26 * scale;
             IconBox.Margin = new Thickness(0, 0, 10 * scale, 0);
@@ -388,7 +400,7 @@ namespace JiaoLongControl.Server
             var widthAnim = new DoubleAnimationUsingKeyFrames();
             widthAnim.KeyFrames.Add(new EasingDoubleKeyFrame(circleW * 0.78, TimeSpan.Zero));
             widthAnim.KeyFrames.Add(new EasingDoubleKeyFrame(circleW, TimeSpan.FromMilliseconds(D(160)), easeOut));
-            widthAnim.KeyFrames.Add(new EasingDoubleKeyFrame(PillW * _uiScale, TimeSpan.FromMilliseconds(D(480)), back));
+            widthAnim.KeyFrames.Add(new EasingDoubleKeyFrame(_pillW * _uiScale, TimeSpan.FromMilliseconds(D(480)), back));
             Pill.BeginAnimation(WidthProperty, widthAnim);
 
             var heightAnim = new DoubleAnimationUsingKeyFrames();
@@ -555,7 +567,7 @@ namespace JiaoLongControl.Server
 
             var easeOut = new CubicEase { EasingMode = EasingMode.EaseOut };
             Animate(Pill, OpacityProperty, curPillOpacity, basePillOpacity, 200, 0, easeOut);
-            Animate(Pill, WidthProperty, curWidth, PillW * _uiScale, 200, 0, easeOut);
+            Animate(Pill, WidthProperty, curWidth, _pillW * _uiScale, 200, 0, easeOut);
             Animate(Pill, HeightProperty, curHeight, PillH * _uiScale, 200, 0, easeOut);
             Animate(PillScale, ScaleTransform.ScaleXProperty, curScaleX, 1, 200, 0, easeOut);
             Animate(PillScale, ScaleTransform.ScaleYProperty, curScaleY, 1, 200, 0, easeOut);
@@ -625,9 +637,10 @@ namespace JiaoLongControl.Server
             var dip = display.ScaleX;
             _dip = dip; // 供悬停柔光做光标物理像素 → 窗口 DIP 换算
             var work = display.WorkArea;
-            var pillPxW = PillW * dip * uiScale;
+            var pillPxW = _pillW * dip * uiScale;
             var pillPxH = PillH * dip * uiScale;
             var margin = 28 * dip;
+            var offsetX = (WinW - _pillW) / 2;
 
             double pillLeft, pillTop;
             switch (position)
@@ -651,7 +664,7 @@ namespace JiaoLongControl.Server
             }
 
             // 窗口左上角 = 胶囊位置 - 胶囊在窗口内的居中偏移; 物理像素 → 该显示器 DIP
-            Left = (pillLeft - OffsetX * dip * uiScale) / dip;
+            Left = (pillLeft - offsetX * dip * uiScale) / dip;
             Top = (pillTop - OffsetY * dip * uiScale) / dip;
         }
 
@@ -727,9 +740,9 @@ namespace JiaoLongControl.Server
             {
                 var mx = pt.X / _dip - Left;
                 var my = pt.Y / _dip - Top;
-                var pillX = OffsetX * _uiScale;
+                var pillX = (WinW - _pillW) / 2 * _uiScale;
                 var pillY = OffsetY * _uiScale;
-                var pillW = PillW * _uiScale;
+                var pillW = _pillW * _uiScale;
                 var pillH = PillH * _uiScale;
                 const double margin = 8; // DIP: 光斑贴到胶囊边缘外一点仍可见
                 inside = mx >= pillX - margin && mx <= pillX + pillW + margin
@@ -922,7 +935,7 @@ namespace JiaoLongControl.Server
             // 溢出判定会失真 — 短曲名被误判溢出而滚动, 长曲名平移目标偏短。
             // 驻留中切歌若撞上上一轮动画未结束 (SMTC 切歌会连发多条刷新), 在此等待重试,
             // 宽度回到满宽基准值 (动画 FillBehavior.Stop 后回落到 ApplyLayoutScale 设置的值) 再测量
-            if (Math.Abs(Pill.Width - PillW * _uiScale) > 0.5)
+            if (Math.Abs(Pill.Width - _pillW * _uiScale) > 0.5)
             {
                 ScheduleTitleMarquee(100);
                 return;
@@ -1031,6 +1044,10 @@ namespace JiaoLongControl.Server
                 return null;
             }
         }
+
+        /// <summary>仅图标+两行状态文案的种类用短胶囊, 避免空白右侧拖长。</summary>
+        private static bool IsCompactKind(string kind) =>
+            kind is "lock" or "touchpad" or "fnlock";
 
         private static Color Darken(Color c, double factor) =>
             Color.FromRgb((byte)(c.R * factor), (byte)(c.G * factor), (byte)(c.B * factor));

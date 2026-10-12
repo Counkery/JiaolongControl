@@ -34,6 +34,7 @@ namespace JiaoLongControl.Server.Core.Controllers
 
         // 强调色 = 工具箱现有主题色板
         private const string AccentVolume = "#3B82F6";      // 蓝 (信息)
+        private const string AccentDisplay = "#F59E0B";     // 琥珀 (屏幕亮度)
         private const string AccentLock = "#FF7D00";        // 橙 (提示)
         private const string AccentKeyboard = "#8A2BE2";    // 紫 (键盘 RGB 主题色)
         private const string AccentPerf = "#34D399";        // 绿 (性能)
@@ -53,7 +54,10 @@ namespace JiaoLongControl.Server.Core.Controllers
         private bool _disposed;
         private IntPtr _hook = IntPtr.Zero;
         private byte? _lastBrightness;
+        private int? _lastScreenBrightness;
         private bool? _lastCaps;
+        private CancellationTokenSource? _displayBrightCts;
+        private Task? _displayBrightTask;
         private ResultState? _lastFnLock;
         private string? _lastMediaKey;
         private bool? _lastNum;
@@ -88,6 +92,7 @@ namespace JiaoLongControl.Server.Core.Controllers
             {
                 _mediaPollTimer?.Stop();
                 _pollCts?.Cancel();
+                _displayBrightCts?.Cancel();
             }
             catch
             {
@@ -163,6 +168,9 @@ namespace JiaoLongControl.Server.Core.Controllers
                 Logger.Info("EC 事件通道不可用, OSD 状态检测退回轮询模式");
                 StartStatePolling();
             }
+
+            // 屏幕亮度不在 HID_EVENT20 内, 无论事件通道是否可用都独立轮询
+            StartDisplayBrightnessPolling();
 
             // 系统媒体会话监视 (音乐开始播放/切歌时提示); 初始化失败仅记录, 不影响其它链路
             StartMediaWatcher();
@@ -423,6 +431,72 @@ namespace JiaoLongControl.Server.Core.Controllers
                 BarValue = null,
                 BrightnessLevel = lv,
             }, cfg);
+        }
+
+        /// <summary>屏幕亮度变化时弹出可拖动亮度条。</summary>
+        private void ShowScreenBrightnessOsd(int percent, bool force)
+        {
+            var cfg = Bridge.Instance.Config.Osd;
+            if (!force && (!cfg.Enabled || !cfg.ShowScreenBrightness)) return;
+            var p = Math.Clamp(percent, 0, 100);
+            _lastScreenBrightness = p;
+            ShowOnWindow(new OsdItem
+            {
+                Kind = "display",
+                IconGlyph = "\uE706", // Brightness
+                AccentHex = AccentDisplay,
+                Title = "屏幕亮度",
+                Subtitle = $"{p}%",
+                BarValue = p / 100.0,
+            }, cfg);
+        }
+
+        private void StartDisplayBrightnessPolling()
+        {
+            if (_displayBrightTask != null) return;
+            _displayBrightCts = new CancellationTokenSource();
+            var token = _displayBrightCts.Token;
+            _displayBrightTask = Task.Factory.StartNew(
+                () =>
+                {
+                    while (!token.IsCancellationRequested)
+                    {
+                        try
+                        {
+                            var cfg = Bridge.Instance.Config.Osd;
+                            if (cfg.Enabled && cfg.ShowScreenBrightness)
+                                DetectScreenBrightness();
+                            token.WaitHandle.WaitOne(Math.Clamp(cfg.PollIntervalMs, 500, 5000));
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            break;
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Warn($"OSD 屏幕亮度轮询异常: {ex.Message}");
+                            token.WaitHandle.WaitOne(2000);
+                        }
+                    }
+                },
+                token,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default);
+        }
+
+        private void DetectScreenBrightness()
+        {
+            var percent = DisplayBrightness.TryGetPercent();
+            if (!percent.HasValue) return;
+            if (!_lastScreenBrightness.HasValue)
+            {
+                _lastScreenBrightness = percent.Value;
+                return;
+            }
+
+            if (percent.Value == _lastScreenBrightness.Value) return;
+            _lastScreenBrightness = percent.Value;
+            DebounceShow("display", () => ShowScreenBrightnessOsd(percent.Value, force: false));
         }
 
         /// <summary>
@@ -1031,22 +1105,32 @@ namespace JiaoLongControl.Server.Core.Controllers
 
         // ===== OSD 交互回调 (交互型 OSD 上的滑条/分段/按钮, UI 线程) =====
 
-        /// <summary>音量滑条拖动/点击: 直接设置系统音量; 界面由窗口原位刷新, 不重播动画。</summary>
+        /// <summary>音量/屏幕亮度滑条拖动/点击: 按当前 Kind 分别写 Core Audio 或 WMI 亮度。</summary>
         private void OnVolumeSelected(double ratio)
         {
             try
             {
-                CoreAudio.SetVolume((float)Math.Clamp(ratio, 0, 1));
+                var r = Math.Clamp(ratio, 0, 1);
+                if (_window?.CurrentKind == "display")
+                {
+                    var percent = (int)Math.Round(r * 100);
+                    if (DisplayBrightness.TrySetPercent(percent))
+                        _lastScreenBrightness = percent;
+                    return;
+                }
+
+                CoreAudio.SetVolume((float)r);
             }
             catch (Exception ex)
             {
-                Logger.Warn($"OSD 音量调整失败: {ex.Message}");
+                Logger.Warn($"OSD 滑条调整失败: {ex.Message}");
             }
         }
 
         /// <summary>音量 OSD 静音按钮: 取反当前静音状态并原位刷新图标。</summary>
         private void OnMuteToggled()
         {
+            if (_window?.CurrentKind == "display") return;
             try
             {
                 var muted = CoreAudio.GetVolumeState().Muted;

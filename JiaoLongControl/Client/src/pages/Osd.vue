@@ -164,12 +164,17 @@ onMounted(() => {
             title="音量指示"
           />
           <SettingToggle
+            config-path="Osd.ShowScreenBrightness"
+            description="按下屏幕亮度增减键时，显示亮度条与百分比（经 WMI 轮询检测；开启「屏蔽系统与厂家旧 OSD」后由本胶囊接替系统亮度浮层）。停留期间可拖动进度条调节"
+            title="屏幕亮度"
+          />
+          <SettingToggle
             config-path="Osd.SuppressNativeVolumeOsd"
-            description="开启后不再弹出 Windows 自带的音量、亮度、媒体浮层；音量键由本程序调整并显示自绘 OSD。厂家旧 OSD（BLDFnHotkeyUtility，含 Caps 等）跑在系统完整性，无法直接藏窗，因此在「启用 OSD」或本项打开时会挂起该 OSD 进程；Fn / EC 仍由 BLDHotKeyService 处理。关闭本项且关掉「启用 OSD」后，厂家进程恢复。"
+            description="开启后不再弹出 Windows 自带的音量、亮度、媒体浮层；音量键由本程序调整并显示自绘 OSD，屏幕亮度由上方「屏幕亮度」胶囊接替。厂家旧 OSD（BLDFnHotkeyUtility，含 Caps 等）跑在系统完整性，无法直接藏窗，因此在「启用 OSD」或本项打开时会挂起该 OSD 进程；Fn / EC 仍由 BLDHotKeyService 处理。关闭本项且关掉「启用 OSD」后，厂家进程恢复。"
             title="屏蔽系统与厂家旧 OSD"
           />
           <SettingToggle
-            description="按下大写锁定 / 数字锁定 / 滚动锁定键时，显示对应的开关状态"
+            description="按下大写锁定 / 数字锁定 / 滚动锁定键时，显示短胶囊开关状态（不含右侧进度条区域）"
             title="锁定键状态"
             config-path="Osd.ShowLockKeys"
           />
@@ -196,7 +201,7 @@ onMounted(() => {
           <SettingToggle
             title="触摸板锁定"
             config-path="Osd.ShowTouchpad"
-            description="原生 Fn 组合键切换触摸板锁定时显示状态（EC 状态轮询检测，变化后约一个轮询间隔内弹出）"
+            description="原生 Fn 组合键切换触摸板锁定时显示短胶囊状态（EC 状态轮询检测，变化后约一个轮询间隔内弹出）"
           />
           <SettingToggle
             config-path="Osd.ShowMedia"

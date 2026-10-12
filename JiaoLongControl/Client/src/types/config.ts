@@ -120,6 +120,7 @@ export type OsdPosition = 'TopCenter' | 'BottomCenter' | 'Custom'
 export interface OsdSectionType {
   Enabled: boolean
   ShowVolume: boolean
+  ShowScreenBrightness: boolean
   ShowLockKeys: boolean
   ShowKeyboardBacklight: boolean
   ShowPerformanceMode: boolean

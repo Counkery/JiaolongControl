@@ -3,8 +3,9 @@ namespace JiaoLongControl.Server.Core.Models
     /// <summary>单次 OSD 显示的内容模型（图标/强调色/两行文本/进度条/交互类型）。</summary>
     public class OsdItem
     {
-        /// <summary>OSD 类型: volume / keyboard / media / lock / perf / fnlock / touchpad；
-        /// volume、keyboard、media 为交互型 (音量滑条 / 背光分段 / 媒体控制按钮)。</summary>
+        /// <summary>OSD 类型: volume / display / keyboard / media / lock / perf / fnlock / touchpad；
+        /// volume/display/keyboard/media 为交互型 (音量·屏幕亮度滑条 / 背光分段 / 媒体按钮)；
+        /// lock/touchpad/fnlock 为短胶囊状态型。</summary>
         public string Kind { get; init; } = "";
 
         /// <summary>Segoe MDL2 Assets 图标字形。</summary>

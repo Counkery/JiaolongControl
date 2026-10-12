@@ -392,6 +392,9 @@ public class OsdSection
     [ConfigComment("显示项目: 音量指示")]
     public bool ShowVolume { get; set; } = true;
 
+    [ConfigComment("显示项目: 屏幕亮度 (Fn 亮度键经 WMI 轮询检测; 屏蔽系统浮层后由此胶囊接替)")]
+    public bool ShowScreenBrightness { get; set; } = true;
+
     [ConfigComment("显示项目: 大写/数字/滚动锁定")]
     public bool ShowLockKeys { get; set; } = true;
 
