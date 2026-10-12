@@ -37,6 +37,8 @@ public static class ConfigSerializer
     private static readonly Version OfficeSweetSpotVersion = new("10.19.53");
     // 自该版本起 OSD 默认：Custom 50%/96%、出入场 200ms、显示 500ms、缩放 100%、轮询 500ms。
     private static readonly Version OsdLayoutDefaultsVersion = new("10.19.61");
+    // 10.19.61 曾把 Version 先写成新号导致 CustomY=8 未迁到 96，此版本补迁。
+    private static readonly Version OsdCustomY96Version = new("10.19.62");
 
     public static string ConfigDir { get; set; } = Path.Combine(AppContext.BaseDirectory, "config");
     public static string ConfigPath => Path.Combine(ConfigDir, FileName);
@@ -185,6 +187,13 @@ public static class ConfigSerializer
                 osd.Scale = 100;
             if (osd.PollIntervalMs is 1000 or 800)
                 osd.PollIntervalMs = 500;
+        }
+
+        // 升级到 10.19.62+：旧默认 CustomY=8（顶部附近）一律收到 96%。
+        if (!Version.TryParse(LowConfig.Version, out oldVersion) || oldVersion < OsdCustomY96Version)
+        {
+            if (LowConfig.Osd.CustomY == 8)
+                LowConfig.Osd.CustomY = 96;
         }
 
         // 默认无损迁移
