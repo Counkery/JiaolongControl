@@ -1,0 +1,56 @@
+name: Release portable zip
+
+on:
+  push:
+    branches:
+      - remake/jiaolong-control
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Publish when this AppVersion has no release yet
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $csproj = Get-Content -Raw "JiaoLongControl/JiaoLongControl.csproj"
+          if ($csproj -notmatch '<AppVersion>([^<]+)</AppVersion>') {
+            throw "csproj 里没有 AppVersion"
+          }
+          $version = $Matches[1].Trim()
+          $tag = "v$version"
+          Write-Host "AppVersion=$version"
+          gh release view $tag --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "$tag 已存在，跳过"
+            exit 0
+          }
+          $out = "artifacts/JiaoLongControl-$version"
+          dotnet publish "JiaoLongControl/JiaoLongControl.csproj" -c Release -p:Platform=x64 -o $out --nologo
+          if ($LASTEXITCODE -ne 0) { throw "publish 失败" }
+          $zip = "artifacts/JiaoLongControl-$version-win-x64.zip"
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path "$out/*" -DestinationPath $zip -CompressionLevel Optimal
+          $notes = @"
+          ## JiaoLongControl $version
+
+          蛟龙 16 Pro 2023（7945HX + 4060）便携包。分支 ``remake/jiaolong-control``。
+
+          解压后退出其它蛟龙控制台，右键管理员运行 ``JiaoLongControl.exe``。Ryzen SMU 需安装 PawnIO。
+          "@
+          gh release create $tag $zip --repo $env:GITHUB_REPOSITORY --target remake/jiaolong-control --title $tag --notes $notes
+          if ($LASTEXITCODE -ne 0) { throw "创建 Release 失败" }
