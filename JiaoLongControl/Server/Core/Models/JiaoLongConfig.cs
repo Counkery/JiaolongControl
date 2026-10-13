@@ -111,7 +111,7 @@ public static class CpuProfilePresets
         CpuLongPower = 45,
         CpuShortPower = 60,
         CpuTempWall = 90,
-        CpuMaxFrequency = 4500,
+        CpuMaxFrequency = 4750,
         CpuTurbo = true,
         RecommendedCurveOptimizer = -8,
         SoftSchedule = SoftSchedulePresets.Office()
@@ -280,7 +280,7 @@ public class FanSection
 
     [ConfigComment("安静模式转速上限 (RPM), 合法 2200–3500")]
     [ConfigRange(2200, 3500)]
-    public int QuietModeFanRpm { get; set; } = 2700;
+    public int QuietModeFanRpm { get; set; } = 3000;
 
     [ConfigComment("均衡模式转速上限 (RPM), 合法 3500–5000; 安静日常推荐 3500")]
     [ConfigRange(3500, 5000)]

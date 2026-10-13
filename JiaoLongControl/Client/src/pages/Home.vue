@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
@@ -209,6 +209,8 @@ const freqPresets = [
   { mhz: 0, label: '不限制' },
 ]
 const freqApplying = ref(false)
+/** 自定义频率输入 (MHz)；与滑条/预设同步 */
+const freqInputMhz = ref<number | undefined>(undefined)
 
 function activeCpuBlock() {
   const cpu = configStore.config?.Cpu
@@ -230,20 +232,30 @@ const liveFreqGhz = computed(() =>
   cpuStats.value?.FrequencyMhz ? (cpuStats.value.FrequencyMhz / 1000).toFixed(2) : '—',
 )
 
+watch(
+  freqMhz,
+  (v) => {
+    freqInputMhz.value = v
+  },
+  { immediate: true },
+)
+
 async function applyFreqCap(mhz: number) {
   const block = activeCpuBlock()
   if (!block || freqApplying.value) return
+  const clamped = mhz <= 0 ? 0 : Math.round(Math.min(5400, Math.max(400, mhz)))
   freqApplying.value = true
-  block.CpuMaxFrequency = mhz
+  block.CpuMaxFrequency = clamped
+  freqInputMhz.value = clamped
   try {
     const res =
-      mhz <= 0 ? await Power.ResetCPUMaxFrequency() : await Power.SetCPUMaxFrequency(mhz)
+      clamped <= 0 ? await Power.ResetCPUMaxFrequency() : await Power.SetCPUMaxFrequency(clamped)
     if (!res.Success) {
       Message.error(res.Message || '频率上限设置失败')
       return
     }
     await configStore.saveConfig()
-    Message.success(mhz <= 0 ? '已取消 CPU 频率上限' : `CPU 频率上限 ${mhz} MHz`)
+    Message.success(clamped <= 0 ? '已取消 CPU 频率上限' : `CPU 频率上限 ${clamped} MHz`)
   } catch {
     Message.error('频率上限设置失败')
   } finally {
@@ -254,6 +266,15 @@ async function applyFreqCap(mhz: number) {
 function onFreqSlider(value: number | [number, number]) {
   const mhz = Array.isArray(value) ? value[0] : value
   void applyFreqCap(mhz)
+}
+
+function commitFreqInput() {
+  const raw = freqInputMhz.value
+  if (raw === undefined || raw === null || Number.isNaN(Number(raw))) {
+    freqInputMhz.value = freqMhz.value
+    return
+  }
+  void applyFreqCap(Number(raw))
 }
 
 const gpuCoreMhz = computed(() => parseInt(gpuStats.value?.CoreClock || '0', 10) || 0)
@@ -519,16 +540,41 @@ const lineChartOption = computed(() => ({
         </div>
         <span class="text-[11px] text-gray-500">写入当前电源方案，并记到正在使用的 CPU 档</span>
       </div>
-      <div class="flex flex-wrap gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <button
           v-for="p in freqPresets"
           :key="p.mhz"
-          class="text-[11px] px-3 py-1 rounded-lg border border-ink/10 hover:bg-ink/5 text-gray-300 disabled:opacity-50"
+          class="jl-btn-quiet"
           :disabled="freqApplying"
           @click="applyFreqCap(p.mhz)"
         >
           {{ p.label }}
         </button>
+        <div class="flex items-center gap-1.5 ml-auto">
+          <a-input-number
+            v-model="freqInputMhz"
+            :disabled="freqApplying"
+            :min="0"
+            :max="5400"
+            :step="50"
+            :precision="0"
+            hide-button
+            size="small"
+            class="!w-[108px]"
+            placeholder="MHz"
+            @press-enter="commitFreqInput"
+            @blur="commitFreqInput"
+          />
+          <span class="text-[11px] text-gray-500">MHz</span>
+          <button
+            type="button"
+            class="jl-btn-quiet"
+            :disabled="freqApplying"
+            @click="commitFreqInput"
+          >
+            应用
+          </button>
+        </div>
       </div>
       <a-slider
         :model-value="freqMhz"

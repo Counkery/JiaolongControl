@@ -43,6 +43,8 @@ public static class ConfigSerializer
     private static readonly Version OsdSnappyVersion = new("10.19.65");
     // 出入场改为固定时长纯淡入淡出, 默认更干脆。
     private static readonly Version OsdInstantVersion = new("10.19.67");
+    // 静音档：CPU 上限 4.75GHz、风扇上限 3000RPM（仅覆盖旧默认值）。
+    private static readonly Version QuietTuneVersion = new("10.19.71");
 
     public static string ConfigDir { get; set; } = Path.Combine(AppContext.BaseDirectory, "config");
     public static string ConfigPath => Path.Combine(ConfigDir, FileName);
@@ -216,6 +218,16 @@ public static class ConfigSerializer
             var osd = LowConfig.Osd;
             if (osd.AnimationMs is 120 or 200 or 480 or 400)
                 osd.AnimationMs = 80;
+        }
+
+        // 升级到 10.19.71+：静音档旧默认 4500/4400 → 4750；风扇旧默认 2700 → 3000。
+        if (!Version.TryParse(LowConfig.Version, out oldVersion) || oldVersion < QuietTuneVersion)
+        {
+            var saving = LowConfig.Cpu.Saving;
+            if (saving.CpuLongPower == 45 && saving.CpuMaxFrequency is 4500 or 4400)
+                saving.CpuMaxFrequency = 4750;
+            if (LowConfig.Fan.QuietModeFanRpm == 2700)
+                LowConfig.Fan.QuietModeFanRpm = 3000;
         }
 
         // 默认无损迁移

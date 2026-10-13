@@ -50,7 +50,7 @@ export const CPU_PROFILE_DEFAULTS: Record<
     CpuLongPower: 45,
     CpuShortPower: 60,
     CpuTempWall: 90,
-    CpuMaxFrequency: 4500,
+    CpuMaxFrequency: 4750,
     CpuTurbo: true,
     RecommendedCurveOptimizer: -8,
     SoftSchedule: { ...SOFT_OFFICE },

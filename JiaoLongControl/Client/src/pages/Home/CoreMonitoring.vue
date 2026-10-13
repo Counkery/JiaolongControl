@@ -21,7 +21,6 @@ const rings = computed(() => [
     text: `${Math.round(props.cpuUsage || 0)}%`,
     pct: clampPct(props.cpuUsage || 0, 100),
     color: '#7c3aed',
-    scale: '',
   },
   {
     key: 'gpu-use',
@@ -29,7 +28,6 @@ const rings = computed(() => [
     text: `${Math.round(props.gpuUsage || 0)}%`,
     pct: clampPct(props.gpuUsage || 0, 100),
     color: '#10b981',
-    scale: '',
   },
   {
     key: 'cpu-temp',
@@ -37,7 +35,6 @@ const rings = computed(() => [
     text: `${Math.round(props.cpuTemp || 0)}℃`,
     pct: clampPct(props.cpuTemp || 0, 100),
     color: '#3b82f6',
-    scale: '刻度 100℃',
   },
   {
     key: 'gpu-temp',
@@ -45,7 +42,6 @@ const rings = computed(() => [
     text: `${Math.round(props.gpuTemp || 0)}℃`,
     pct: clampPct(props.gpuTemp || 0, 100),
     color: '#8b5cf6',
-    scale: '刻度 100℃',
   },
 ])
 
@@ -74,7 +70,6 @@ const packageText = computed(() =>
           </div>
         </div>
         <span class="text-[11px] text-gray-400 mt-1 text-center leading-tight">{{ ring.label }}</span>
-        <span class="text-[10px] text-gray-500 h-3">{{ ring.scale }}</span>
       </div>
     </div>
     <div class="mt-1 grid grid-cols-3 gap-2 min-w-0">
