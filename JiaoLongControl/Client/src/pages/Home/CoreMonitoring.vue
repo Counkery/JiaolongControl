@@ -59,7 +59,7 @@ const packageText = computed(() =>
 </script>
 
 <template>
-  <div class="col-span-7 min-w-0 glass-card p-4 sm:p-5 flex flex-col overflow-hidden">
+  <div class="col-span-7 min-w-0 jl-panel p-4 sm:p-5 flex flex-col overflow-hidden">
     <h2 class="text-[15px] font-medium text-ink/90 mb-2">核心监控</h2>
     <div class="flex-1 min-h-0 grid grid-cols-4 gap-2 items-center">
       <div v-for="ring in rings" :key="ring.key" class="min-w-0 flex flex-col items-center">

@@ -137,19 +137,19 @@ function handleReset() {
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto text-ink p-6 no-scrollbar">
+  <div class="jl-page">
     <div class="max-w-[1300px] mx-auto flex flex-col lg:flex-row gap-6">
       <!-- ==================== 左侧：键盘控制区 ==================== -->
       <div class="flex-1 space-y-6">
         <!-- 头部标题 -->
         <div>
-          <h1 class="text-2xl font-bold tracking-wide">键盘 RGB 灯效</h1>
-          <p class="text-[13px] text-gray-500 mt-1">自定义 RGB 背光颜色与灯光亮度。</p>
+          <h1 class="jl-page-title">键盘 RGB 灯效</h1>
+          <p class="jl-page-desc">自定义 RGB 背光颜色与灯光亮度。</p>
         </div>
 
         <!-- 1. 键盘灯效可视化预览卡片 -->
         <div
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg"
+          class="jl-panel"
         >
           <div class="flex justify-between items-center mb-4">
             <h2 class="text-[13px] font-semibold text-gray-300">灯效实时预览</h2>
@@ -205,7 +205,7 @@ function handleReset() {
 
         <!-- 2. 快捷配色预设 -->
         <div
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg"
+          class="jl-panel"
         >
           <h2 class="text-[13px] font-semibold text-gray-300 mb-3">快捷预设</h2>
           <div class="grid grid-cols-3 sm:grid-cols-6 gap-3">
@@ -229,7 +229,7 @@ function handleReset() {
 
         <!-- 3. 键盘渐变效果 -->
         <div
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg"
+          class="jl-panel"
         >
           <div class="flex items-center justify-between gap-4">
             <div class="space-y-1.5">
@@ -261,7 +261,7 @@ function handleReset() {
 
         <!-- 4. 灯光通道与亮度手动调节 -->
         <div
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg space-y-6"
+          class="jl-panel space-y-6"
           :class="{ 'opacity-40 pointer-events-none': gradientRunning }"
         >
           <h2 class="text-[13px] font-semibold text-gray-300">RGB 通道与亮度</h2>
@@ -345,7 +345,7 @@ function handleReset() {
       <div class="w-full lg:w-[360px] shrink-0 space-y-6 lg:pt-[115px]">
         <!-- 1. 当前颜色色板卡片 -->
         <div
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg space-y-4"
+          class="jl-panel space-y-4"
         >
           <h2 class="text-[13px] font-semibold text-gray-300">当前配色方案</h2>
           <div
@@ -371,7 +371,7 @@ function handleReset() {
 
         <!-- 2. 说明卡片 -->
         <div
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg space-y-2.5"
+          class="jl-panel space-y-2.5"
         >
           <h2 class="text-[13px] font-semibold text-gray-300">使用说明</h2>
           <div class="text-[11px] text-gray-500 leading-relaxed space-y-2">

@@ -87,18 +87,18 @@ async function releaseToEc() {
 </script>
 
 <template>
-  <div v-if="FanPageStore" class="h-full overflow-y-auto text-ink p-6 no-scrollbar">
+  <div v-if="FanPageStore" class="jl-page">
     <div class="max-w-[1300px] mx-auto flex flex-col lg:flex-row gap-6">
       <div class="flex-1 space-y-6">
         <div>
-          <h1 class="text-2xl font-bold tracking-wide">风扇转速上限</h1>
-          <p class="text-[13px] text-gray-500 mt-1">
+          <h1 class="jl-page-title">风扇转速上限</h1>
+          <p class="jl-page-desc">
             官方语义：WMI 设置当前模式允许的最高转速（不是自定义温度曲线）。范围随模式变化。
           </p>
         </div>
 
         <div
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg flex items-center justify-between gap-4"
+          class="jl-panel flex items-center justify-between gap-4"
         >
           <div>
             <h2 class="text-[13px] font-semibold text-gray-300">启用转速上限</h2>
@@ -110,7 +110,7 @@ async function releaseToEc() {
         </div>
 
         <div
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-6 shadow-lg"
+          class="jl-panel jl-panel--roomy"
         >
           <div class="flex flex-col gap-6">
             <div class="flex justify-between items-end">
@@ -159,7 +159,7 @@ async function releaseToEc() {
       <div class="w-full lg:w-[360px] shrink-0 space-y-6 lg:pt-[80px]">
         <FanSpeed />
         <div
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg space-y-2.5 select-none"
+          class="jl-panel space-y-2.5 select-none"
         >
           <h2 class="text-[13px] font-semibold text-gray-300">说明</h2>
           <div class="text-[11px] text-gray-500 leading-relaxed space-y-2">

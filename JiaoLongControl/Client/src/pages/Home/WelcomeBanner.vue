@@ -12,7 +12,7 @@ defineProps<{
 
 <template>
   <div
-    class="glass-card h-[280px] relative overflow-hidden flex flex-col justify-between p-10 group"
+    class="jl-panel h-[280px] relative overflow-hidden flex flex-col justify-between p-10 group"
   >
     <!-- 右侧背景视频和渐变层，无缝融入背景 -->
     <div class="absolute right-0 top-0 bottom-0 w-[50%] z-0 pointer-events-none overflow-hidden">

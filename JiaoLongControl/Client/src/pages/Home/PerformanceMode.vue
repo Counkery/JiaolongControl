@@ -22,7 +22,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="col-span-5 min-w-0 glass-card p-6 flex flex-col">
+  <div class="col-span-5 min-w-0 jl-panel jl-panel--roomy flex flex-col">
     <div class="flex items-center justify-between mb-4 gap-3">
       <div class="flex items-center gap-2 min-w-0">
         <h2 class="text-[15px] font-medium text-ink/90 shrink-0">性能模式</h2>

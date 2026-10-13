@@ -34,12 +34,12 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto text-ink p-6 no-scrollbar">
-    <div class="max-w-[1300px] mx-auto space-y-6">
+  <div class="jl-page">
+    <div class="jl-page-inner space-y-6">
       <div class="flex items-end justify-between gap-4">
         <div>
-          <h1 class="text-2xl font-bold tracking-wide">设备信息</h1>
-          <p class="text-[13px] text-gray-500 mt-1">CPU / GPU / 内存 / 磁盘概览（对照第三方 DeviceInfo）</p>
+          <h1 class="jl-page-title">设备信息</h1>
+          <p class="jl-page-desc">CPU / GPU / 内存 / 磁盘概览（对照第三方 DeviceInfo）</p>
         </div>
         <button
           class="text-xs font-semibold text-gray-300 border border-ink/10 hover:border-ink/20 px-4 py-2 rounded-lg"
@@ -55,7 +55,7 @@ onUnmounted(() => {
 
       <template v-else-if="info">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <section class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg">
+          <section class="jl-panel">
             <h2 class="text-[13px] font-semibold text-gray-300 mb-3">处理器</h2>
             <dl class="space-y-2 text-[12px]">
               <div class="flex justify-between gap-3">
@@ -77,7 +77,7 @@ onUnmounted(() => {
             </dl>
           </section>
 
-          <section class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg">
+          <section class="jl-panel">
             <h2 class="text-[13px] font-semibold text-gray-300 mb-3">图形处理器</h2>
             <div v-if="!info.Gpus.length" class="text-[12px] text-gray-500">未检测到显卡</div>
             <div v-for="(g, i) in info.Gpus" :key="i" class="mb-3 last:mb-0 space-y-2 text-[12px]">
@@ -96,7 +96,7 @@ onUnmounted(() => {
             </div>
           </section>
 
-          <section class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg">
+          <section class="jl-panel">
             <h2 class="text-[13px] font-semibold text-gray-300 mb-3">内存</h2>
             <div class="mb-3">
               <div class="flex justify-between text-[12px] mb-1">
@@ -121,7 +121,7 @@ onUnmounted(() => {
             </div>
           </section>
 
-          <section class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg">
+          <section class="jl-panel">
             <h2 class="text-[13px] font-semibold text-gray-300 mb-3">系统</h2>
             <dl class="space-y-2 text-[12px]">
               <div class="flex justify-between gap-3">
@@ -136,7 +136,7 @@ onUnmounted(() => {
           </section>
         </div>
 
-        <section class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg">
+        <section class="jl-panel">
           <h2 class="text-[13px] font-semibold text-gray-300 mb-4">物理磁盘</h2>
           <div v-if="!info.Disks.length" class="text-[12px] text-gray-500">未检测到磁盘</div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -154,7 +154,7 @@ onUnmounted(() => {
           </div>
         </section>
 
-        <section class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg">
+        <section class="jl-panel">
           <h2 class="text-[13px] font-semibold text-gray-300 mb-4">逻辑卷</h2>
           <div class="space-y-4">
             <div v-for="(v, i) in info.Volumes" :key="i" class="text-[12px]">

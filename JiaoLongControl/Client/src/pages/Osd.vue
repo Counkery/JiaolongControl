@@ -163,11 +163,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <div v-if="osdData" class="h-full overflow-y-auto text-ink p-6 no-scrollbar">
-    <div class="max-w-[1300px] mx-auto">
+  <div v-if="osdData" class="jl-page">
+    <div class="jl-page-inner">
       <div>
-        <h1 class="text-2xl font-bold tracking-wide">OSD 屏幕显示</h1>
-        <p class="text-[13px] text-gray-500 mt-1">
+        <h1 class="jl-page-title">OSD 屏幕显示</h1>
+        <p class="jl-page-desc">
           按键时在屏幕弹出置顶胶囊，调完后自动隐去；先开总开关，再选要显示的内容与外观
         </p>
       </div>
@@ -177,7 +177,7 @@ onMounted(() => {
         <div class="flex-1 space-y-6">
           <section class="space-y-3">
             <h2
-              class="text-xs font-black text-purple-400 uppercase tracking-widest border-l-4 border-purple-600 pl-2.5"
+              class="jl-section-title"
             >
               总控
             </h2>
@@ -195,7 +195,7 @@ onMounted(() => {
 
           <section class="space-y-3" :class="contentDisabled ? 'opacity-55' : ''">
             <h2
-              class="text-xs font-black text-blue-400 uppercase tracking-widest border-l-4 border-blue-500 pl-2.5"
+              class="jl-section-title jl-section-title--blue"
             >
               显示内容
             </h2>
@@ -265,11 +265,11 @@ onMounted(() => {
         <!-- 右列: 外观 + 预览 + 进阶/说明 -->
         <div class="w-full lg:w-[380px] shrink-0 space-y-6 lg:sticky lg:top-0 lg:self-start">
           <div
-            class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg space-y-5"
+            class="jl-panel space-y-5"
             :class="contentDisabled ? 'opacity-55 pointer-events-none' : ''"
           >
             <h3
-              class="text-xs font-black text-purple-400 uppercase tracking-widest border-l-4 border-purple-600 pl-2.5"
+              class="jl-section-title"
             >
               外观与位置
             </h3>
@@ -384,10 +384,10 @@ onMounted(() => {
 
           <!-- 效果预览：总开关关闭时仍可点预览（force）验证样式 -->
           <div
-            class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg space-y-4"
+            class="jl-panel space-y-4"
           >
             <h3
-              class="text-xs font-black text-blue-400 uppercase tracking-widest border-l-4 border-blue-500 pl-2.5"
+              class="jl-section-title jl-section-title--blue"
             >
               效果预览
             </h3>
@@ -429,15 +429,15 @@ onMounted(() => {
 
           <!-- 进阶 -->
           <div
-            class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl shadow-lg overflow-hidden"
+            class="jl-panel jl-panel--flush overflow-hidden"
           >
             <button
               type="button"
-              class="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-ink/[0.03] transition"
+              class="jl-collapse-trigger"
               @click="advancedOpen = !advancedOpen"
             >
               <span
-                class="text-xs font-black text-rose-400 uppercase tracking-widest border-l-4 border-rose-500 pl-2.5"
+                class="jl-section-title jl-section-title--rose"
               >
                 进阶
               </span>
@@ -474,11 +474,11 @@ onMounted(() => {
 
           <!-- 名词解释 -->
           <div
-            class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl shadow-lg overflow-hidden"
+            class="jl-panel jl-panel--flush overflow-hidden"
           >
             <button
               type="button"
-              class="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-ink/[0.03] transition"
+              class="jl-collapse-trigger"
               @click="glossaryOpen = !glossaryOpen"
             >
               <span class="text-[13px] font-semibold text-gray-300">名词解释</span>

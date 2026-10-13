@@ -66,15 +66,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div
-    v-if="props.variant === 'card'"
-    class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg space-y-4"
-  >
-    <h3
-      class="text-xs font-black text-emerald-400 uppercase tracking-widest border-l-4 border-emerald-500 pl-2.5"
-    >
-      锁定控制
-    </h3>
+  <div v-if="props.variant === 'card'" class="jl-panel space-y-4">
+    <h3 class="jl-section-title jl-section-title--emerald">锁定控制</h3>
     <div class="grid grid-cols-2 gap-2">
       <button
         v-for="item in lockItems"
@@ -99,7 +92,7 @@ onMounted(() => {
     </p>
   </div>
 
-  <div v-else class="glass-card px-5 py-4 space-y-3 min-w-0">
+  <div v-else class="jl-panel space-y-3 min-w-0">
     <div class="flex items-center justify-between gap-3">
       <h2 class="text-[15px] font-medium text-ink/90">快捷锁定</h2>
       <span class="text-[11px] text-gray-500">点击切换 · 状态实时同步</span>

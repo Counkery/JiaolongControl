@@ -360,14 +360,14 @@ async function handleCancel() {
 </script>
 
 <template>
-  <div v-if="CPUData" class="h-full overflow-y-auto text-ink p-6 no-scrollbar">
+  <div v-if="CPUData" class="jl-page">
     <div class="max-w-[1300px] mx-auto flex flex-col lg:flex-row gap-6">
       <!-- ==================== 左/中：CPU 设置区域 ==================== -->
       <div class="flex-1 space-y-6">
         <!-- 头部标题 -->
         <div>
-          <h1 class="text-2xl font-bold tracking-wide">CPU 设置</h1>
-          <p class="text-[13px] text-gray-500 mt-1">
+          <h1 class="jl-page-title">CPU 设置</h1>
+          <p class="jl-page-desc">
             调整功耗墙与频率；应用档位时同步软调度（EPP / 停放 / Boost），插电与电池分设。
           </p>
           <p
@@ -387,7 +387,7 @@ async function handleCancel() {
 
         <!-- 0. EC 自定义功耗模式 -->
         <div
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg flex items-center justify-between gap-4"
+          class="jl-panel flex items-center justify-between gap-4"
         >
           <div>
             <h2 class="text-[13px] font-semibold text-gray-300">EC 自定义功耗模式</h2>
@@ -408,7 +408,7 @@ async function handleCancel() {
 
         <!-- 1. CPU 配置文件 -->
         <div
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg"
+          class="jl-panel"
         >
           <div class="flex justify-between items-center mb-4">
             <h2 class="text-[13px] font-semibold text-gray-300">CPU 配置文件</h2>
@@ -438,7 +438,7 @@ async function handleCancel() {
 
         <!-- 2. 核心设置 -->
         <div
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg space-y-6"
+          class="jl-panel space-y-6"
         >
           <h2 class="text-[13px] font-semibold text-gray-300">核心设置</h2>
 
@@ -566,7 +566,7 @@ async function handleCancel() {
         <!-- 3. 软调度（随档位应用，出厂值；重置可恢复） -->
         <div
           v-if="softScheduleView"
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg space-y-3"
+          class="jl-panel space-y-3"
         >
           <div>
             <h2 class="text-[13px] font-semibold text-gray-300">
@@ -635,7 +635,7 @@ async function handleCancel() {
       <div class="w-full lg:w-[360px] shrink-0 space-y-6 lg:pt-[115px]">
         <!-- 1. CPU 信息卡片 -->
         <div
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg"
+          class="jl-panel"
         >
           <h2 class="text-[13px] font-semibold text-gray-300 mb-4">CPU 信息</h2>
           <div class="flex items-center gap-4 h-[96px]">
@@ -661,7 +661,7 @@ async function handleCancel() {
 
         <!-- 2. 实时状态卡片 -->
         <div
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg space-y-4"
+          class="jl-panel space-y-4"
         >
           <h2 class="text-[13px] font-semibold text-gray-300">实时状态</h2>
 
@@ -737,7 +737,7 @@ async function handleCancel() {
 
         <!-- 3. 核心分布卡片 -->
         <div
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg space-y-3.5"
+          class="jl-panel space-y-3.5"
         >
           <div class="flex justify-between items-center">
             <h2 class="text-[13px] font-semibold text-gray-300">核心分布</h2>
@@ -767,7 +767,7 @@ async function handleCancel() {
 
         <!-- 4. 说明卡片 -->
         <div
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg space-y-2.5"
+          class="jl-panel space-y-2.5"
         >
           <h2 class="text-[13px] font-semibold text-gray-300">说明</h2>
           <div class="text-[11px] text-gray-500 leading-relaxed space-y-2">

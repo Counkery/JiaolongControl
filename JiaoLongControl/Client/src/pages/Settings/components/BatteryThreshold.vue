@@ -51,7 +51,7 @@ async function launch(enable: boolean) {
 
 <template>
   <div
-    class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg space-y-4"
+    class="jl-panel space-y-4"
   >
     <div>
       <h2 class="text-[15px] font-semibold text-ink">电池充电阈值（外挂）</h2>

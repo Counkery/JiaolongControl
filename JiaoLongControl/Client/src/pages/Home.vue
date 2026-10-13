@@ -445,7 +445,7 @@ const lineChartOption = computed(() => ({
 </script>
 
 <template>
-  <div class="p-6 h-full overflow-y-auto space-y-6 text-ink no-scrollbar">
+  <div class="jl-page">
     <!-- Row 1: 顶部 Banner -->
     <WelcomeBannerComp
       :cpu-temp="cpuTemp"
@@ -507,7 +507,7 @@ const lineChartOption = computed(() => ({
 
     <QuickLocks variant="compact" />
 
-    <div class="glass-card px-5 py-4 space-y-3 min-w-0">
+    <div class="jl-panel space-y-3 min-w-0">
       <div class="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 class="text-[15px] font-medium text-ink/90">CPU 频率</h2>
@@ -543,7 +543,7 @@ const lineChartOption = computed(() => ({
     <!-- Row 3: 系统概览 & 风扇 & 曲线 -->
     <div class="grid grid-cols-12 gap-6 h-[280px]">
       <!-- 系统概览 -->
-      <div class="col-span-4 glass-card p-6 flex flex-col">
+      <div class="col-span-4 jl-panel jl-panel--roomy flex flex-col">
         <h2 class="text-[15px] font-medium text-ink/90 mb-4">系统概览</h2>
         <div class="flex-1 flex flex-col justify-between">
           <div class="flex items-center gap-4">
@@ -600,24 +600,12 @@ const lineChartOption = computed(() => ({
       </div>
 
       <!-- 风扇与噪音 -->
-      <div class="col-span-4 glass-card p-6 flex flex-col">
+      <div class="col-span-4 jl-panel jl-panel--roomy flex flex-col">
         <div class="flex items-center justify-between gap-2 mb-4">
           <h2 class="text-[15px] font-medium text-ink/90">风扇与噪音</h2>
           <div class="flex gap-1.5">
-            <button
-              type="button"
-              class="text-[10px] font-semibold px-2 py-1 rounded-md border border-ink/10 text-gray-300 hover:bg-ink/5"
-              @click="goRoute('fan')"
-            >
-              风扇上限
-            </button>
-            <button
-              type="button"
-              class="text-[10px] font-semibold px-2 py-1 rounded-md border border-ink/10 text-gray-300 hover:bg-ink/5"
-              @click="goRoute('fan-curve')"
-            >
-              软件曲线
-            </button>
+            <button type="button" class="jl-btn-quiet" @click="goRoute('fan')">风扇上限</button>
+            <button type="button" class="jl-btn-quiet" @click="goRoute('fan-curve')">软件曲线</button>
           </div>
         </div>
 
@@ -684,7 +672,7 @@ const lineChartOption = computed(() => ({
       </div>
 
       <!-- 温度走势 -->
-      <div class="col-span-4 glass-card p-6 flex flex-col">
+      <div class="col-span-4 jl-panel jl-panel--roomy flex flex-col">
         <h2 class="text-[15px] font-medium text-ink/90 mb-2">温度走势</h2>
         <div class="flex-1">
           <VChart :option="lineChartOption" autoresize />

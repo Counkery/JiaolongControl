@@ -51,6 +51,8 @@ async function onChange(next: string | number | boolean) {
     if (!res?.Success) {
       writePath(prev)
       Message.error(res?.Message || '保存失败')
+    } else {
+      Message.success({ content: '已保存', duration: 1200 })
     }
   } catch (e) {
     writePath(prev)

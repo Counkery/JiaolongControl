@@ -7,7 +7,7 @@ defineProps<{
 
 <template>
   <div
-    class="glass-card p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-300 hover:border-cyber-purple/30 hover:shadow-[0_0_20px_rgba(138,43,226,0.15)] bg-cyber-card/40"
+    class="jl-panel flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-cyber-purple/25"
   >
     <div class="space-y-1">
       <h3 class="text-[15px] font-semibold text-ink tracking-wide flex items-center gap-2">
@@ -25,5 +25,3 @@ defineProps<{
     </div>
   </div>
 </template>
-
-<style scoped></style>

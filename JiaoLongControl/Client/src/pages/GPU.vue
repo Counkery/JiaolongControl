@@ -319,19 +319,19 @@ await fetchGpuCurve()
 </script>
 
 <template>
-  <div v-if="GPUData && gpuName" class="h-full overflow-y-auto text-ink p-6 no-scrollbar">
+  <div v-if="GPUData && gpuName" class="jl-page">
     <div class="max-w-[1300px] mx-auto flex flex-col lg:flex-row gap-6">
       <!-- ==================== 左/中：显卡主要设置区 ==================== -->
       <div class="flex-1 space-y-6">
         <!-- 头部标题 -->
         <div>
-          <h1 class="text-2xl font-bold tracking-wide">GPU 设置</h1>
-          <p class="text-[13px] text-gray-500 mt-1">调整 GPU 的性能参数，发挥显卡最佳性能。</p>
+          <h1 class="jl-page-title">GPU 设置</h1>
+          <p class="jl-page-desc">调整 GPU 的性能参数，发挥显卡最佳性能。</p>
         </div>
 
         <!-- 1. 选择 GPU 与卡片详情 -->
         <div
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg flex flex-col md:flex-row justify-between gap-6"
+          class="jl-panel flex flex-col md:flex-row justify-between gap-6"
         >
           <div class="space-y-3 md:w-1/2">
             <span class="text-[11px] text-gray-500 font-semibold block uppercase">当前 GPU</span>
@@ -391,7 +391,7 @@ await fetchGpuCurve()
         <!-- 常规设置面板 -->
         <div
           v-if="!showAdvanced"
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg space-y-5"
+          class="jl-panel space-y-5"
         >
           <div class="space-y-5">
             <div class="space-y-2">
@@ -469,7 +469,7 @@ await fetchGpuCurve()
         <!-- 高级超频面板 -->
         <div
           v-if="showAdvanced"
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg space-y-6"
+          class="jl-panel space-y-6"
         >
           <div
             v-if="curveCaps && !curveCaps.Supported"
@@ -560,7 +560,7 @@ await fetchGpuCurve()
       <div class="w-full lg:w-[360px] shrink-0 space-y-6 lg:pt-[115px]">
         <!-- 2. 实时监控面板 -->
         <div
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg space-y-4"
+          class="jl-panel space-y-4"
         >
           <div class="flex justify-between items-center">
             <h2 class="text-[13px] font-semibold text-gray-300">实时监控</h2>
@@ -713,7 +713,7 @@ await fetchGpuCurve()
 
         <!-- 说明卡片 -->
         <div
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg space-y-2.5"
+          class="jl-panel space-y-2.5"
         >
           <h2 class="text-[13px] font-semibold text-gray-300">说明</h2>
           <div class="text-[11px] text-gray-500 leading-relaxed space-y-2">

@@ -318,14 +318,14 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div v-if="smuData" class="h-full overflow-y-auto text-ink p-6 no-scrollbar">
+  <div v-if="smuData" class="jl-page">
     <div class="max-w-[1300px] mx-auto flex flex-col lg:flex-row gap-6">
       <!-- ==================== 左/中：高级电源、频率微调区 ==================== -->
       <div class="flex-1 space-y-6">
         <!-- 头部标题 -->
         <div>
-          <h1 class="text-2xl font-bold tracking-wide">Ryzen SMU</h1>
-          <p class="text-[13px] text-gray-500 mt-1">
+          <h1 class="jl-page-title">Ryzen SMU</h1>
+          <p class="jl-page-desc">
             高级电源、电流及频率限制调整 (AMD Ryzen 平台专用)
           </p>
         </div>
@@ -335,7 +335,7 @@ onUnmounted(() => {
           <div
             v-for="group in CONFIG_GROUPS"
             :key="group.title"
-            class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg flex flex-col justify-between"
+            class="jl-panel flex flex-col justify-between"
           >
             <div>
               <h3
@@ -403,12 +403,12 @@ onUnmounted(() => {
         <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
           <!-- Curve Optimizer 面板 -->
           <div
-            class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg flex flex-col justify-between"
+            class="jl-panel flex flex-col justify-between"
           >
             <div>
               <div class="flex justify-between items-center mb-4">
                 <h3
-                  class="text-xs font-black text-orange-400 uppercase tracking-widest border-l-4 border-orange-500 pl-2.5"
+                  class="jl-section-title jl-section-title--orange"
                 >
                   Curve Optimizer 曲线优化
                 </h3>
@@ -482,7 +482,7 @@ onUnmounted(() => {
 
           <!-- Per Core OC Clocks 面板 -->
           <div
-            class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg flex flex-col justify-between"
+            class="jl-panel flex flex-col justify-between"
           >
             <div>
               <h3
@@ -526,7 +526,7 @@ onUnmounted(() => {
       <div class="w-full lg:w-[360px] shrink-0 space-y-6 lg:pt-[115px]">
         <!-- 1. AMD Ryzen 处理器芯片详情 -->
         <div
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg"
+          class="jl-panel"
         >
           <h2 class="text-[13px] font-semibold text-gray-300 mb-4">Ryzen 芯片架构</h2>
           <div class="flex items-center gap-4">
@@ -557,7 +557,7 @@ onUnmounted(() => {
 
         <!-- 2. 电源实时监视器（遥测 PPT / TDC / EDC 波形图） -->
         <div
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg space-y-4"
+          class="jl-panel space-y-4"
         >
           <div class="flex items-center justify-between">
             <h2 class="text-[13px] font-semibold text-gray-300">SMU 电源遥测</h2>
@@ -712,7 +712,7 @@ onUnmounted(() => {
 
         <!-- 3. 技术名释说明 -->
         <div
-          class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg space-y-2.5"
+          class="jl-panel space-y-2.5"
         >
           <h2 class="text-[13px] font-semibold text-gray-300">名词解释</h2>
           <div class="text-[11px] text-gray-500 leading-relaxed space-y-2">

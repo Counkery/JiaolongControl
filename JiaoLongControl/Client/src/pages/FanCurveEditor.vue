@@ -1,15 +1,15 @@
 <template>
-  <div class="h-full overflow-y-auto text-ink p-6 no-scrollbar">
-    <div class="max-w-[1300px] mx-auto space-y-6">
+  <div class="jl-page">
+    <div class="jl-page-inner space-y-6">
       <div>
-        <h1 class="text-2xl font-bold tracking-wide">软件风扇曲线（进阶）</h1>
-        <p class="text-[13px] text-gray-500 mt-1">
+        <h1 class="jl-page-title">软件风扇曲线（进阶）</h1>
+        <p class="jl-page-desc">
           软件轮询 + Blding 强制设速，与官方「转速上限」不是同一路径。日常安静请优先用主页「安静日常」或风扇页 WMI 上限；勿与上限同时开启。
         </p>
       </div>
 
       <div
-        class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+        class="jl-panel flex flex-col sm:flex-row sm:items-center justify-between gap-4"
       >
         <div>
           <h2 class="text-[13px] font-semibold text-gray-300">开机自动启动温度曲线</h2>
@@ -21,7 +21,7 @@
       </div>
 
       <div
-        class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl p-5 shadow-lg space-y-4"
+        class="jl-panel space-y-4"
       >
         <div>
           <h2 class="text-[13px] font-semibold text-gray-300">斜率限速</h2>

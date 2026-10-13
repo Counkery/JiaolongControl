@@ -84,18 +84,18 @@ const visibleBootCards = computed(() => {
 </script>
 
 <template>
-  <div class="p-6 h-full overflow-y-auto space-y-6 text-ink no-scrollbar pb-20">
-    <div class="max-w-[1000px] mx-auto">
-      <h1 class="text-2xl font-bold tracking-wider">设置</h1>
-      <p class="text-[13px] text-gray-500 mt-1.5">
+  <div class="jl-page pb-20">
+    <div class="jl-page-inner-narrow">
+      <h1 class="jl-page-title">设置</h1>
+      <p class="jl-page-desc">
         设备快捷控制、外观主题、开机策略与进阶选项
       </p>
     </div>
 
-    <div class="max-w-[1000px] mx-auto space-y-6">
+    <div class="jl-page-inner-narrow space-y-6">
       <section class="space-y-3">
         <h2
-          class="text-xs font-black text-emerald-400 uppercase tracking-widest border-l-4 border-emerald-500 pl-2.5"
+          class="jl-section-title jl-section-title--emerald"
         >
           设备快捷
         </h2>
@@ -106,7 +106,7 @@ const visibleBootCards = computed(() => {
 
       <section class="space-y-3">
         <h2
-          class="text-xs font-black text-purple-400 uppercase tracking-widest border-l-4 border-purple-600 pl-2.5"
+          class="jl-section-title"
         >
           外观与启动
         </h2>
@@ -116,7 +116,7 @@ const visibleBootCards = computed(() => {
 
       <section class="space-y-3">
         <h2
-          class="text-xs font-black text-blue-400 uppercase tracking-widest border-l-4 border-blue-500 pl-2.5"
+          class="jl-section-title jl-section-title--blue"
         >
           开机自动应用
         </h2>
@@ -133,7 +133,7 @@ const visibleBootCards = computed(() => {
 
       <section class="space-y-3">
         <h2
-          class="text-xs font-black text-amber-400 uppercase tracking-widest border-l-4 border-amber-500 pl-2.5"
+          class="jl-section-title jl-section-title--amber"
         >
           进阶选项
         </h2>
@@ -149,11 +149,11 @@ const visibleBootCards = computed(() => {
       </section>
 
       <div
-        class="bg-panel/60 backdrop-blur-md border border-ink/[0.05] rounded-xl shadow-lg overflow-hidden"
+        class="jl-panel jl-panel--flush"
       >
         <button
           type="button"
-          class="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-ink/[0.03] transition"
+          class="jl-collapse-trigger"
           @click="glossaryOpen = !glossaryOpen"
         >
           <span class="text-[13px] font-semibold text-gray-300">名词解释</span>
