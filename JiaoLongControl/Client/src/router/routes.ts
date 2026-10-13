@@ -30,7 +30,7 @@ const routes: RouteRecordRaw[] = [
         path: 'fan-curve',
         name: 'fan-curve',
         component: () => import('@/pages/FanCurveEditor.vue'),
-        meta: { title: '温度曲线' },
+        meta: { title: '软件风扇曲线' },
       },
       { path: 'fan', name: 'fan', component: () => import('@/pages/Fan.vue'), meta: { title: '风扇' } },
       {
@@ -43,8 +43,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'general',
         name: 'general',
-        component: () => import('@/pages/General.vue'),
-        meta: { title: '常规设置' },
+        redirect: { name: 'settings' },
       },
       {
         path: 'settings',

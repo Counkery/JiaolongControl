@@ -10,6 +10,8 @@ defineProps<{
   }>
   quietDailyLoading?: boolean
   portable135Loading?: boolean
+  /** 当前场景文案，如「安静日常」「便携 135W」 */
+  activeSceneLabel?: string
 }>()
 
 const emit = defineEmits<{
@@ -22,7 +24,15 @@ const emit = defineEmits<{
 <template>
   <div class="col-span-5 min-w-0 glass-card p-6 flex flex-col">
     <div class="flex items-center justify-between mb-4 gap-3">
-      <h2 class="text-[15px] font-medium text-ink/90">性能模式</h2>
+      <div class="flex items-center gap-2 min-w-0">
+        <h2 class="text-[15px] font-medium text-ink/90 shrink-0">性能模式</h2>
+        <span
+          v-if="activeSceneLabel"
+          class="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-200 border border-amber-500/30 truncate"
+        >
+          {{ activeSceneLabel }}
+        </span>
+      </div>
       <div class="flex items-center gap-2 flex-wrap justify-end">
         <button
           :disabled="quietDailyLoading || portable135Loading"
@@ -73,7 +83,6 @@ const emit = defineEmits<{
 </template>
 
 <style scoped>
-/* 选中模式按钮: 深色紫 500 边框 + 发光; 浅色为淡灰底 + 灰边框, 不发光 */
 .mode-btn-active {
   border-color: #a855f7;
   box-shadow: 0 0 15px rgba(138, 43, 226, 0.3);

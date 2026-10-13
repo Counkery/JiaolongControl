@@ -4,25 +4,30 @@ import CPU from '@/assets/icon/CPU.png'
 import Fan from '@/assets/icon/Fan.png'
 import Keyboard from '@/assets/icon/Keyboard.png'
 import Settings from '@/assets/icon/Settings.png'
-import Settings2 from '@/assets/icon/Settings2.png'
 import AMD from '@/assets/icon/AMD.png'
 import GPU from '@/assets/icon/GPU.png'
 import FanCurve from '@/assets/icon/FanCurve.png'
 import OSD from '@/assets/icon/Monitoring.png'
 
-/** 侧栏项：route 名对应懒加载路由，页面组件不再静态打包进主包 */
+export type NavGroup = 'daily' | 'advanced' | 'settings'
+
+/** 侧栏项：route 名对应懒加载路由；group 决定日常用 / 进阶调校 / 底部设置 */
 export const HomeCardType = [
-  { title: '主页', icon: HOME, route: 'home' },
-  { title: '设备信息', icon: OSD, route: 'device' },
-  { title: '中央处理器', icon: CPU, route: 'cpu' },
-  { title: '图形处理器', icon: GPU, route: 'gpu' },
-  { title: 'Ryzen SMU', icon: AMD, route: 'ryzen-smu' },
-  { title: '温度曲线', icon: FanCurve, route: 'fan-curve' },
-  { title: '风扇', icon: Fan, route: 'fan' },
-  { title: '键盘', icon: Keyboard, route: 'keyboard' },
-  { title: 'OSD', icon: OSD, route: 'osd' },
-  { title: '常规设置', icon: Settings2, route: 'general' },
-  { title: '设置', icon: Settings, route: 'settings' },
+  { title: '主页', icon: HOME, route: 'home', group: 'daily' as NavGroup },
+  { title: '键盘', icon: Keyboard, route: 'keyboard', group: 'daily' as NavGroup },
+  { title: 'OSD', icon: OSD, route: 'osd', group: 'daily' as NavGroup },
+  { title: '设备信息', icon: OSD, route: 'device', group: 'advanced' as NavGroup },
+  { title: '中央处理器', icon: CPU, route: 'cpu', group: 'advanced' as NavGroup },
+  { title: '图形处理器', icon: GPU, route: 'gpu', group: 'advanced' as NavGroup },
+  { title: 'Ryzen SMU', icon: AMD, route: 'ryzen-smu', group: 'advanced' as NavGroup },
+  { title: '风扇', icon: Fan, route: 'fan', group: 'advanced' as NavGroup },
+  {
+    title: '软件风扇曲线',
+    icon: FanCurve,
+    route: 'fan-curve',
+    group: 'advanced' as NavGroup,
+  },
+  { title: '设置', icon: Settings, route: 'settings', group: 'settings' as NavGroup },
 ].map((item, index) => ({
   ...item,
   num: index + 1,
@@ -31,11 +36,19 @@ export const HomeCardType = [
 const PAGE_STORAGE_KEY = 'jl-ui-page'
 const ROUTE_STORAGE_KEY = 'jl-ui-route'
 
+/** 旧「常规设置」入口并入设置页 */
+const ROUTE_ALIASES: Record<string, string> = {
+  general: 'settings',
+}
+
 export function resolveInitialRoute(): string {
   try {
     const savedRoute = localStorage.getItem(ROUTE_STORAGE_KEY)
-    if (savedRoute && HomeCardType.some((p) => p.route === savedRoute)) {
-      return savedRoute
+    if (savedRoute) {
+      const mapped = ROUTE_ALIASES[savedRoute] ?? savedRoute
+      if (HomeCardType.some((p) => p.route === mapped)) {
+        return mapped
+      }
     }
     const savedNum = Number(localStorage.getItem(PAGE_STORAGE_KEY))
     if (Number.isInteger(savedNum) && savedNum >= 1 && savedNum <= HomeCardType.length) {
@@ -70,7 +83,8 @@ const useStore = defineStore('store', {
     },
     syncFromRoute(routeName: string | symbol | null | undefined) {
       if (typeof routeName !== 'string') return
-      const item = HomeCardType.find((p) => p.route === routeName)
+      const mapped = ROUTE_ALIASES[routeName] ?? routeName
+      const item = HomeCardType.find((p) => p.route === mapped)
       if (!item || item.num === this.SwitchPages) return
       this.SwitchPages = item.num
       try {

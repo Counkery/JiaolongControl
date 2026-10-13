@@ -2,7 +2,7 @@
   <div class="h-full overflow-y-auto text-ink p-6 no-scrollbar">
     <div class="max-w-[1300px] mx-auto space-y-6">
       <div>
-        <h1 class="text-2xl font-bold tracking-wide">温度曲线模式（进阶）</h1>
+        <h1 class="text-2xl font-bold tracking-wide">软件风扇曲线（进阶）</h1>
         <p class="text-[13px] text-gray-500 mt-1">
           软件轮询 + Blding 强制设速，与官方「转速上限」不是同一路径。日常安静请优先用主页「安静日常」或风扇页 WMI 上限；勿与上限同时开启。
         </p>

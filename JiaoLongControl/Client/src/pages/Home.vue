@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
@@ -9,6 +10,8 @@ import { Message, Modal } from '@arco-design/web-vue'
 import { AutoFanControl, Fan, PerformanceMode, Power, SystemInfo, SystemPerMode } from '@/utils/bridge'
 import { useConfigStore } from '@/stores/config'
 import { useSystemInfoStore } from '@/stores/systemInfo'
+import useStore from '@/stores'
+import QuickLocks from '@/components/common/QuickLocks.vue'
 import { chartTheme } from '@/theme/theme'
 import { storeToRefs } from 'pinia'
 import imgCPU from '@/assets/icon/iconCPU.png'
@@ -20,6 +23,9 @@ import iconPerformance from '@/assets/icon/iconPerformance.png'
 import PerformanceModeComp from './Home/PerformanceMode.vue'
 import CoreMonitoringComp from './Home/CoreMonitoring.vue'
 import WelcomeBannerComp from './Home/WelcomeBanner.vue'
+
+const router = useRouter()
+const uiStore = useStore()
 
 use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent])
 
@@ -128,9 +134,28 @@ function setMode(id: SystemPerMode) {
     performanceModes.value.forEach((m) => {
       m.active = m.id === id
     })
-    await PerformanceMode.Set(id)
+    try {
+      const res = await PerformanceMode.Set(id)
+      if (res.Success) {
+        Message.success(res.Message || `已切换到${mode?.name || '该模式'}`)
+      } else {
+        Message.error(res.Message || '切换失败')
+        await fetchPerformanceMode()
+      }
+    } catch {
+      Message.error('切换性能模式失败')
+      await fetchPerformanceMode()
+    }
     await refreshScene()
+    await refreshFanPath()
   })()
+}
+
+function goRoute(name: string) {
+  uiStore.syncFromRoute(name)
+  if (router.currentRoute.value.name !== name) {
+    void router.push({ name })
+  }
 }
 
 const quietDailyLoading = ref(false)
@@ -146,6 +171,7 @@ async function applyQuietDaily() {
       await rememberScene('QuietDaily')
       await fetchPerformanceMode()
       await refreshScene()
+      await refreshFanPath()
     } else {
       Message.error(res.Message || '应用失败')
     }
@@ -165,6 +191,7 @@ async function applyPortable135() {
       await rememberScene('Portable135')
       await fetchPerformanceMode()
       await refreshScene()
+      await refreshFanPath()
     } else {
       Message.error(res.Message || '应用失败')
     }
@@ -462,6 +489,7 @@ const lineChartOption = computed(() => ({
         :modes="performanceModes"
         :quiet-daily-loading="quietDailyLoading"
         :portable135-loading="portable135Loading"
+        :active-scene-label="sceneLabel(activeScene) || undefined"
         @change-mode="setMode"
         @quiet-daily="applyQuietDaily"
         @portable-135="applyPortable135"
@@ -476,6 +504,8 @@ const lineChartOption = computed(() => ({
         :cpu-package-watts="cpuPackagePower"
       />
     </div>
+
+    <QuickLocks variant="compact" />
 
     <div class="glass-card px-5 py-4 space-y-3 min-w-0">
       <div class="flex items-center justify-between gap-3 flex-wrap">
@@ -571,7 +601,25 @@ const lineChartOption = computed(() => ({
 
       <!-- 风扇与噪音 -->
       <div class="col-span-4 glass-card p-6 flex flex-col">
-        <h2 class="text-[15px] font-medium text-ink/90 mb-4">风扇与噪音</h2>
+        <div class="flex items-center justify-between gap-2 mb-4">
+          <h2 class="text-[15px] font-medium text-ink/90">风扇与噪音</h2>
+          <div class="flex gap-1.5">
+            <button
+              type="button"
+              class="text-[10px] font-semibold px-2 py-1 rounded-md border border-ink/10 text-gray-300 hover:bg-ink/5"
+              @click="goRoute('fan')"
+            >
+              风扇上限
+            </button>
+            <button
+              type="button"
+              class="text-[10px] font-semibold px-2 py-1 rounded-md border border-ink/10 text-gray-300 hover:bg-ink/5"
+              @click="goRoute('fan-curve')"
+            >
+              软件曲线
+            </button>
+          </div>
+        </div>
 
         <div class="flex items-center gap-4 mb-6">
           <div
@@ -635,9 +683,9 @@ const lineChartOption = computed(() => ({
         </div>
       </div>
 
-      <!-- 温度曲线 -->
+      <!-- 温度走势 -->
       <div class="col-span-4 glass-card p-6 flex flex-col">
-        <h2 class="text-[15px] font-medium text-ink/90 mb-2">温度曲线</h2>
+        <h2 class="text-[15px] font-medium text-ink/90 mb-2">温度走势</h2>
         <div class="flex-1">
           <VChart :option="lineChartOption" autoresize />
         </div>

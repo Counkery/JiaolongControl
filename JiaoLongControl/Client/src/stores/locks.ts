@@ -5,7 +5,7 @@ import type {OsdLockStates} from '@/utils/bridge'
  * 四项锁定状态 (大写/数字/功能键/触摸板) 的实时镜像。
  * 数据来源:
  * 1) C# 检测到状态变化时经 WebView 推送 lock-states-changed 消息 (App.vue 分发到 apply)
- * 2) 常规设置页挂载时的 GetLockStates 拉取
+ * 2) 快捷锁定 / 设置页挂载时的 GetLockStates 拉取
  */
 export const useLocksStore = defineStore('locks', {
   state: () => ({
