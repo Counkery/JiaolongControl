@@ -333,7 +333,7 @@ function handleReset() {
 
           <button
             :disabled="loading || gradientRunning"
-            class="text-xs font-medium text-white bg-gradient-to-r from-purple-700 to-indigo-600 hover:from-purple-600 hover:to-indigo-500 disabled:opacity-50 px-6 py-2 rounded-lg transition-all shadow-[0_0_15px_rgba(138,43,226,0.3)]"
+            class="text-xs font-medium text-white bg-purple-700 hover:bg-purple-600 disabled:opacity-50 px-6 py-2 rounded-lg transition-all "
             @click="handleApply"
           >
             {{ loading ? '应用中...' : '应用' }}

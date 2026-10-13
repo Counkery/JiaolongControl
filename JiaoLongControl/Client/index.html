@@ -3,6 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <title>JiaoLong Control Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <script>
       // 启动防闪烁: 必须先于任何样式/渲染执行, 按 localStorage 缓存恢复主题
       // (由 src/theme/theme.ts 在每次解析结果变化时写入); 无缓存时跟随系统深浅色
@@ -21,19 +27,21 @@
     </script>
     <style>
       :root {
-        --loader-bg: #070b1c;
-        --loader-bg-mid: rgba(13, 16, 37, 0.95);
-        --loader-title: #ffffff;
-        --loader-sub: #94a3b8;
+        --loader-bg: #0f1114;
+        --loader-bg-mid: rgba(20, 23, 28, 0.96);
+        --loader-title: #e8eaed;
+        --loader-sub: #8b93a0;
         --loader-bar: rgba(255, 255, 255, 0.1);
+        --loader-accent: #2dd4bf;
       }
 
       [data-theme='light'] {
-        --loader-bg: #e9edf5;
-        --loader-bg-mid: rgba(255, 255, 255, 0.95);
-        --loader-title: #1a1b26;
-        --loader-sub: #5a6478;
-        --loader-bar: rgba(13, 14, 21, 0.1);
+        --loader-bg: #f4f5f7;
+        --loader-bg-mid: rgba(255, 255, 255, 0.96);
+        --loader-title: #14171c;
+        --loader-sub: #5c6570;
+        --loader-bar: rgba(15, 17, 20, 0.1);
+        --loader-accent: #0d9488;
       }
 
       body,
@@ -45,7 +53,7 @@
         overflow: hidden;
         background-color: var(--loader-bg);
         font-family:
-          'Inter',
+          'IBM Plex Sans',
           'Segoe UI',
           system-ui,
           -apple-system,
@@ -64,10 +72,7 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        background:
-          radial-gradient(circle at 15% 10%, rgba(40, 90, 255, 0.3) 0%, transparent 50%),
-          radial-gradient(circle at 85% 15%, rgba(180, 60, 255, 0.25) 0%, transparent 50%),
-          radial-gradient(circle at 50% 50%, var(--loader-bg-mid) 0%, var(--loader-bg) 100%);
+        background: linear-gradient(180deg, var(--loader-bg-mid) 0%, var(--loader-bg) 100%);
         transition:
           opacity 0.4s ease,
           visibility 0.4s ease;
@@ -79,7 +84,6 @@
         pointer-events: none;
       }
 
-      /* 光环动画 */
       .loader-spinner {
         position: relative;
         width: 90px;
@@ -95,10 +99,9 @@
         height: 100%;
         border-radius: 50%;
         border: 2px solid transparent;
-        border-top-color: #8a2be2;
-        border-right-color: #3b82f6;
-        animation: spin 1.2s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
-        filter: drop-shadow(0 0 10px rgba(138, 43, 226, 0.6));
+        border-top-color: var(--loader-accent);
+        border-right-color: rgba(56, 189, 248, 0.7);
+        animation: spin 1.2s linear infinite;
       }
 
       .spinner-inner {
@@ -107,18 +110,15 @@
         height: 70%;
         border-radius: 50%;
         border: 2px solid transparent;
-        border-bottom-color: #00ff7f;
-        border-left-color: #3b82f6;
+        border-bottom-color: #34d399;
+        border-left-color: rgba(56, 189, 248, 0.5);
         animation: spin-reverse 0.9s linear infinite;
-        filter: drop-shadow(0 0 8px rgba(0, 255, 127, 0.5));
       }
 
       .loader-logo-img {
         width: 42px;
         height: 42px;
         object-fit: contain;
-        filter: drop-shadow(0 0 10px rgba(138, 43, 226, 0.7));
-        animation: pulse 1.5s ease-in-out infinite alternate;
       }
 
       .loader-title {
@@ -127,10 +127,6 @@
         font-weight: 700;
         letter-spacing: 3px;
         color: var(--loader-title);
-        text-shadow: 0 0 12px rgba(138, 43, 226, 0.6);
-        background: linear-gradient(90deg, var(--loader-title), #a78bfa, #60a5fa);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
       }
 
       .loader-sub {
@@ -159,7 +155,7 @@
         top: 0;
         height: 100%;
         width: 40%;
-        background: linear-gradient(90deg, #8a2be2, #3b82f6, #00ff7f);
+        background: linear-gradient(90deg, var(--loader-accent), #38bdf8);
         border-radius: 3px;
         animation: progress-move 1.5s ease-in-out infinite;
       }
@@ -179,17 +175,6 @@
         }
         100% {
           transform: rotate(0deg);
-        }
-      }
-
-      @keyframes pulse {
-        0% {
-          transform: scale(0.95);
-          filter: drop-shadow(0 0 10px rgba(138, 43, 226, 0.4));
-        }
-        100% {
-          transform: scale(1.05);
-          filter: drop-shadow(0 0 20px rgba(59, 130, 246, 0.8));
         }
       }
 

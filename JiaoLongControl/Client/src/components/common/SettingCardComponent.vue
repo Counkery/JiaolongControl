@@ -7,7 +7,7 @@ defineProps<{
 
 <template>
   <div
-    class="jl-panel flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-cyber-purple/25"
+    class="jl-panel flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-ink/15"
   >
     <div class="space-y-1">
       <h3 class="text-[15px] font-semibold text-ink tracking-wide flex items-center gap-2">
