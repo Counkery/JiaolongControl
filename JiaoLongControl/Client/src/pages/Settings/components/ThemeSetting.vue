@@ -39,7 +39,7 @@ function select(mode: ThemeMode) {
           class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer"
           :class="
             current === opt.value
-              ? 'bg-cyber-purple text-white'
+              ? 'bg-cyber-purple text-white shadow-[0_0_10px_var(--color-glow-purple)]'
               : 'text-muted hover:text-ink'
           "
           @click="select(opt.value)"

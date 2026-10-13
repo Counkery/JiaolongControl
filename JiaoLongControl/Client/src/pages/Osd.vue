@@ -285,7 +285,7 @@ onMounted(() => {
                   type="button"
                   :class="
                     currentPosition === opt.value
-                      ? 'bg-cyber-purple text-white'
+                      ? 'bg-cyber-purple text-white shadow-[0_0_10px_var(--color-glow-purple)]'
                       : 'text-muted hover:text-ink'
                   "
                   class="flex-1 px-2 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer"
@@ -302,7 +302,7 @@ onMounted(() => {
                 <div ref="previewEl" class="absolute inset-x-0 top-0 bottom-[10px]">
                   <div
                     :style="pillStyle"
-                    class="absolute rounded-full bg-gradient-to-r from-purple-500 to-blue-400 border border-ink/10 cursor-grab active:cursor-grabbing touch-none"
+                    class="absolute rounded-full bg-gradient-to-r from-purple-500 to-blue-500 shadow-[0_0_8px_var(--color-glow-purple)] cursor-grab active:cursor-grabbing touch-none"
                     @pointerdown="onPillPointerDown"
                     @pointermove="onPillPointerMove"
                     @pointerup="onPillPointerUp"
@@ -517,13 +517,13 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 :deep(.slider-purple .arco-slider-bar) {
-  background: linear-gradient(90deg, #2dd4bf 0%, var(--color-accent-purple) 100%) !important;
+  background: linear-gradient(90deg, #6366f1 0%, var(--color-accent-purple) 100%) !important;
   height: 5px !important;
   border-radius: 99px;
 }
 :deep(.slider-purple .arco-slider-button) {
   border: 2px solid var(--color-accent-purple) !important;
-  box-shadow: none !important;
+  box-shadow: 0 0 8px rgba(138, 43, 226, 0.6) !important;
 }
 
 :deep(.slider-blue .arco-slider-bar) {

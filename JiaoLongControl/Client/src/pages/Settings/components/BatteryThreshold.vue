@@ -96,7 +96,7 @@ async function launch(enable: boolean) {
     <div class="flex flex-wrap gap-3">
       <button
         :disabled="loading"
-        class="text-xs font-semibold text-white bg-purple-700 disabled:opacity-50 px-4 py-2 rounded-lg"
+        class="text-xs font-semibold text-white bg-gradient-to-r from-purple-700 to-indigo-600 disabled:opacity-50 px-4 py-2 rounded-lg"
         @click="launch(true)"
       >
         启用阈值（管理员）

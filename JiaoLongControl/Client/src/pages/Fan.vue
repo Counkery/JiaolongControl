@@ -140,7 +140,7 @@ async function releaseToEc() {
             <div class="grid grid-cols-2 gap-4 mt-2">
               <button
                 :disabled="loading || !ceilingEnabled"
-                class="text-xs font-semibold text-white bg-purple-700 hover:bg-purple-600 disabled:opacity-50 py-2.5 rounded-lg transition-all"
+                class="text-xs font-semibold text-white bg-gradient-to-r from-purple-700 to-indigo-600 hover:from-purple-600 hover:to-indigo-500 disabled:opacity-50 py-2.5 rounded-lg transition-all"
                 @click="applyCeiling"
               >
                 {{ loading ? '应用中...' : '应用上限' }}

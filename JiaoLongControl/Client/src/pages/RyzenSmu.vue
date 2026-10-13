@@ -757,13 +757,13 @@ onUnmounted(() => {
 
 /* 分色重写 Slider 轨道（紫 / 蓝 / 红 / 橘） */
 :deep(.slider-purple .arco-slider-bar) {
-  background: linear-gradient(90deg, #2dd4bf 0%, var(--color-accent-purple) 100%) !important;
+  background: linear-gradient(90deg, #6366f1 0%, var(--color-accent-purple) 100%) !important;
   height: 5px !important;
   border-radius: 99px;
 }
 :deep(.slider-purple .arco-slider-button) {
   border: 2px solid var(--color-accent-purple) !important;
-  box-shadow: none !important;
+  box-shadow: 0 0 8px rgba(138, 43, 226, 0.6) !important;
 }
 
 :deep(.slider-blue .arco-slider-bar) {

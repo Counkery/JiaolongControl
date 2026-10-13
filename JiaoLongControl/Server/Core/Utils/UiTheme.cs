@@ -10,10 +10,10 @@ using System.Windows.Media;
 /// </summary>
 public static class UiTheme
 {
-    private static readonly Color DarkBackground = Color.FromRgb(0x0F, 0x11, 0x14);
-    private static readonly Color LightBackground = Color.FromRgb(0xF4, 0xF5, 0xF7);
-    private static readonly Color DarkText = Color.FromRgb(0xE8, 0xEA, 0xED);
-    private static readonly Color LightText = Color.FromRgb(0x14, 0x17, 0x1C);
+    private static readonly Color DarkBackground = Color.FromRgb(0x07, 0x0B, 0x1C);
+    private static readonly Color LightBackground = Color.FromRgb(0xE9, 0xED, 0xF5);
+    private static readonly Color DarkText = Color.FromRgb(0xFF, 0xFF, 0xFF);
+    private static readonly Color LightText = Color.FromRgb(0x1A, 0x1B, 0x26);
 
     /// <summary>解析配置主题为是否浅色; system 跟随 Windows 个人化深浅色(默认深色)</summary>
     public static bool IsLight(string? theme)

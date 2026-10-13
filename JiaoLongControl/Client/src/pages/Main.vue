@@ -60,13 +60,24 @@ function navButtonClass(num: number) {
                 :class="navButtonClass(item.num)"
                 @click="onClickMenuItem(Number(item.num))"
               >
-                <div class="w-5 h-5 flex items-center justify-center relative">
+                <div
+                  class="w-5 h-5 flex items-center justify-center relative"
+                  :class="
+                    store.SwitchPages === item.num
+                      ? 'drop-shadow-[0_0_6px_rgba(59,130,246,0.9)]'
+                      : ''
+                  "
+                >
                   <span
-                    class="icon-mask icon-silhouette relative z-10 w-full h-full transition-all duration-200"
+                    v-if="store.SwitchPages === item.num"
+                    class="absolute w-5 h-5 bg-blue-500/40 rounded-full blur-[8px] animate-pulse pointer-events-none"
+                  ></span>
+                  <span
+                    class="icon-mask icon-silhouette relative z-10 w-full h-full transition-all duration-300"
                     :class="
                       store.SwitchPages === item.num
                         ? 'opacity-100'
-                        : 'opacity-70 group-hover:opacity-100'
+                        : 'opacity-75 group-hover:opacity-100'
                     "
                     :style="{ WebkitMaskImage: `url(${item.icon})`, maskImage: `url(${item.icon})` }"
                   ></span>
@@ -85,13 +96,24 @@ function navButtonClass(num: number) {
                 :class="navButtonClass(item.num)"
                 @click="onClickMenuItem(Number(item.num))"
               >
-                <div class="w-5 h-5 flex items-center justify-center relative">
+                <div
+                  class="w-5 h-5 flex items-center justify-center relative"
+                  :class="
+                    store.SwitchPages === item.num
+                      ? 'drop-shadow-[0_0_6px_rgba(59,130,246,0.9)]'
+                      : ''
+                  "
+                >
                   <span
-                    class="icon-mask icon-silhouette relative z-10 w-full h-full transition-all duration-200"
+                    v-if="store.SwitchPages === item.num"
+                    class="absolute w-5 h-5 bg-blue-500/40 rounded-full blur-[8px] animate-pulse pointer-events-none"
+                  ></span>
+                  <span
+                    class="icon-mask icon-silhouette relative z-10 w-full h-full transition-all duration-300"
                     :class="
                       store.SwitchPages === item.num
                         ? 'opacity-100'
-                        : 'opacity-70 group-hover:opacity-100'
+                        : 'opacity-75 group-hover:opacity-100'
                     "
                     :style="{ WebkitMaskImage: `url(${item.icon})`, maskImage: `url(${item.icon})` }"
                   ></span>
@@ -113,10 +135,16 @@ function navButtonClass(num: number) {
             >
               <div class="flex items-center gap-4">
                 <div class="w-5 h-5 flex items-center justify-center relative">
+                  <span
+                    v-if="store.SwitchPages === settingsItem.num"
+                    class="absolute w-5 h-5 bg-blue-500/40 rounded-full blur-[8px] animate-pulse pointer-events-none"
+                  ></span>
                   <icon-settings
                     :class="[
-                      'text-lg relative z-10 transition-all duration-200',
-                      store.SwitchPages === settingsItem.num ? 'text-ink opacity-100' : 'opacity-70',
+                      'text-lg relative z-10 transition-all duration-300',
+                      store.SwitchPages === settingsItem.num
+                        ? 'text-blue-400 drop-shadow-[0_0_6px_rgba(59,130,246,0.9)]'
+                        : '',
                     ]"
                   />
                 </div>
@@ -129,6 +157,13 @@ function navButtonClass(num: number) {
       </aside>
 
       <main class="flex-1 relative overflow-hidden">
+        <div
+          class="absolute top-[-20%] right-[-10%] w-[800px] h-[800px] bg-[radial-gradient(circle_at_center,rgba(138,43,226,0.08),transparent_60%)] pointer-events-none"
+        ></div>
+        <div
+          class="absolute bottom-[-20%] left-[-10%] w-[600px] h-[600px] bg-[radial-gradient(circle_at_center,rgba(59,130,246,0.05),transparent_60%)] pointer-events-none"
+        ></div>
+
         <div class="relative h-full z-10">
           <RightSide />
         </div>

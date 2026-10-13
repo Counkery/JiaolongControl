@@ -368,7 +368,7 @@ await fetchGpuCurve()
             :class="[
               'flex-1 text-xs font-medium px-4 py-2.5 rounded-lg transition-all border',
               !showAdvanced
-                ? 'bg-purple-700 text-white border-transparent '
+                ? 'bg-gradient-to-r from-purple-700 to-indigo-600 text-white border-transparent shadow-[0_0_12px_rgba(138,43,226,0.25)]'
                 : 'bg-ink/[0.02] text-gray-400 border-ink/10 hover:text-ink hover:border-ink/20',
             ]"
             @click="showAdvanced = false"
@@ -379,7 +379,7 @@ await fetchGpuCurve()
             :class="[
               'flex-1 text-xs font-medium px-4 py-2.5 rounded-lg transition-all border',
               showAdvanced
-                ? 'bg-purple-700 text-white border-transparent '
+                ? 'bg-gradient-to-r from-purple-700 to-indigo-600 text-white border-transparent shadow-[0_0_12px_rgba(138,43,226,0.25)]'
                 : 'bg-ink/[0.02] text-gray-400 border-ink/10 hover:text-ink hover:border-ink/20',
             ]"
             @click="showAdvanced = true"
@@ -458,7 +458,7 @@ await fetchGpuCurve()
             </button>
             <button
               :disabled="loading"
-              class="text-xs font-medium text-white bg-purple-700 hover:bg-purple-600 disabled:opacity-50 px-6 py-2 rounded-lg transition-all "
+              class="text-xs font-medium text-white bg-gradient-to-r from-purple-700 to-indigo-600 hover:from-purple-600 hover:to-indigo-500 disabled:opacity-50 px-6 py-2 rounded-lg transition-all shadow-[0_0_15px_rgba(138,43,226,0.3)]"
               @click="handleApplyNormal"
             >
               {{ loading ? '应用中...' : '应用' }}
@@ -547,7 +547,7 @@ await fetchGpuCurve()
             </button>
             <button
               :disabled="curveApplying"
-              class="text-xs font-medium text-white bg-purple-700 hover:bg-purple-600 disabled:opacity-50 px-6 py-2 rounded-lg transition-all "
+              class="text-xs font-medium text-white bg-gradient-to-r from-purple-700 to-indigo-600 hover:from-purple-600 hover:to-indigo-500 disabled:opacity-50 px-6 py-2 rounded-lg transition-all shadow-[0_0_15px_rgba(138,43,226,0.3)]"
               @click="handleApplyCurve"
             >
               {{ curveApplying ? '应用中...' : '应用' }}

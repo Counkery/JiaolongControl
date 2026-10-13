@@ -478,7 +478,7 @@ const {
     transition: all 0.2s;
 
     &:hover {
-      background: color-mix(in srgb, var(--color-accent-purple) 15%, transparent);
+      background: rgba(138, 43, 226, 0.15);
       color: #a855f7;
     }
 
@@ -515,7 +515,7 @@ const {
     &.arco-radio-button-checked {
       background-color: var(--color-accent-purple) !important;
       color: #ffffff !important;
-      box-shadow: none !important;
+      box-shadow: 0 0 10px rgba(138, 43, 226, 0.3) !important;
     }
   }
 }

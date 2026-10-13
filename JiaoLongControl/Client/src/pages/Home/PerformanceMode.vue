@@ -59,7 +59,7 @@ const emit = defineEmits<{
         :class="[
           'py-6 rounded-2xl flex flex-col items-center justify-center gap-3 transition-all duration-300',
           mode.active
-            ? 'mode-btn-active bg-panel-active border'
+            ? 'mode-btn-active bg-purple-900/20 border'
             : 'bg-panel-raised border border-ink/[0.06] hover:bg-ink/5',
         ]"
         @click="emit('change-mode', mode.id)"
@@ -84,14 +84,13 @@ const emit = defineEmits<{
 
 <style scoped>
 .mode-btn-active {
-  border-color: color-mix(in srgb, var(--color-accent-purple) 55%, transparent);
-  background-color: color-mix(in srgb, var(--color-accent-purple) 8%, var(--color-panel-active));
-  box-shadow: none;
+  border-color: #a855f7;
+  box-shadow: 0 0 15px rgba(138, 43, 226, 0.3);
 }
 
 [data-theme='light'] .mode-btn-active {
-  border-color: rgba(13, 148, 136, 0.35);
-  background-color: rgba(13, 148, 136, 0.08);
+  border-color: rgba(13, 14, 21, 0.16);
+  background-color: rgba(13, 14, 21, 0.05);
   box-shadow: none;
 }
 </style>

@@ -22,10 +22,6 @@
   --color-gray-600: var(--jl-gray-600);
   --color-purple-300: var(--jl-purple-300);
   --color-purple-400: var(--jl-purple-400);
-  --color-purple-500: var(--jl-purple-500);
-  --color-purple-600: var(--jl-purple-600);
-  --color-purple-700: var(--jl-purple-700);
-  --color-purple-900: var(--jl-purple-900);
   --color-rose-400: var(--jl-rose-400);
   --color-blue-300: var(--jl-blue-300);
   --color-blue-400: var(--jl-blue-400);
@@ -34,21 +30,31 @@
   --color-green-400: var(--jl-green-400);
   --color-emerald-400: var(--jl-emerald-400);
   --color-amber-400: var(--jl-amber-400);
-  --radius-cyber: 12px;
-  --font-sans: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --radius-cyber: 32px;
 }
 
 @layer base {
   body {
     @apply text-ink antialiased overflow-hidden;
-    font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
     min-height: 100vh;
-    background: linear-gradient(
-      180deg,
-      var(--color-bg-grad-top) 0%,
-      var(--color-bg-grad-bottom) 100%
-    );
+    background:
+        /* 左上蓝光 */
+      radial-gradient(
+        circle at 15% 10%,
+        var(--glow-blue) 0%,
+        var(--glow-blue-soft) 20%,
+        transparent 50%
+      ),
+      /* 右上紫光 */
+        radial-gradient(
+          circle at 85% 15%,
+          var(--glow-purple) 0%,
+          var(--glow-purple-soft) 25%,
+          transparent 55%
+        ),
+      /* 中央蓝光 */ radial-gradient(circle at 50% 0%, var(--glow-center) 0%, transparent 60%),
+      /* 主背景 */ linear-gradient(180deg, var(--color-bg-grad-top) 0%, var(--color-bg-grad-bottom) 100%);
   }
 }
 
@@ -78,11 +84,10 @@
     @apply text-[13px] text-gray-500 mt-1;
   }
 
-  /* 冷静工具风：细边框实色面板，弱模糊弱阴影 */
+  /* 统一面板：圆角 16px，替代散落的 panel/60+rounded-xl 与旧 glass-card 32px */
   .jl-panel,
   .glass-card {
-    @apply bg-cyber-card border border-ink/10 rounded-xl p-5 transition-colors duration-200;
-    box-shadow: 0 1px 2px var(--color-shadow-card);
+    @apply bg-cyber-card/60 backdrop-blur-xl border border-ink/[0.05] rounded-2xl p-5 shadow-lg transition-colors duration-200;
   }
 
   .jl-panel--roomy {
@@ -125,27 +130,27 @@
     @apply w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-ink/[0.03] transition-colors duration-200;
   }
 
-  /* 保留类名，去掉霓虹发光 */
+  /* 霓虹发光文字 */
   .neon-text-purple {
-    text-shadow: none;
+    text-shadow: 0 0 15px rgba(138, 43, 226, 0.5);
   }
 
+  /* 霓虹边框发光 */
   .neon-border-purple {
-    @apply border-cyber-purple/40;
-    box-shadow: none;
+    @apply border-cyber-purple/50 shadow-[0_0_20px_rgba(138,43,226,0.2)];
   }
 
-  /* 侧边栏激活项：淡青绿底 + 左侧细条 */
+  /* 侧边栏激活项 */
   .nav-item-active {
     @apply bg-cyber-purple/10 text-ink relative;
   }
+  /* 浅色下选中底色用淡灰(深色保持紫色调) */
   [data-theme='light'] .nav-item-active {
-    background-color: rgba(13, 148, 136, 0.1);
+    background-color: rgba(13, 14, 21, 0.06);
   }
   .nav-item-active::before {
     content: '';
-    @apply absolute left-0 inset-y-4 w-0.5 bg-cyber-purple rounded-r-full;
-    box-shadow: none;
+    @apply absolute left-0 inset-y-4 w-1 bg-cyber-purple rounded-r-full shadow-[2px_0_10px_var(--color-accent-purple)];
   }
 }
 
@@ -154,9 +159,9 @@
   display: none;
 }
 
-/* Arco Slider：青绿主色，无紫光按钮阴影 */
+/* Arco Slider 基础样式 (各页面共用; 页面级配色变体如 .slider-purple 保留在组件内) */
 .arco-slider-bar {
-  background: linear-gradient(90deg, #2dd4bf 0%, var(--color-accent-purple) 100%) !important;
+  background: linear-gradient(90deg, #6366f1 0%, var(--color-accent-purple) 100%) !important;
   height: 5px !important;
   border-radius: 99px;
 }
@@ -164,19 +169,22 @@
   height: 5px !important;
   border-radius: 99px;
 }
+/* 深色下的轨道底色; 浅色使用 Arco 原生浅色轨道。
+ * 同时写 :not 与显式 dark 两种选择器, 确保任意 data-theme 状态下深色规则都命中 */
 html:not([data-theme='light']) .arco-slider-track,
 html[data-theme='dark'] .arco-slider-track {
-  background-color: rgba(255, 255, 255, 0.06) !important;
+  background-color: rgba(255, 255, 255, 0.04) !important;
 }
 .arco-slider-button {
   background-color: #ffffff !important;
   border: 2.5px solid var(--color-accent-purple) !important;
   width: 13px !important;
   height: 13px !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
+  box-shadow: 0 0 10px rgba(138, 43, 226, 0.7) !important;
 }
 
-/* ===== Arco Modal 全局主题化 ===== */
+/* ===== Arco Modal 全局主题化: 弹窗传送(render-to-body)至 document.body, 页面 scoped
+ * 样式无法命中, 统一在此覆写; 颜色走主题变量, 深色/浅色自动适配 ===== */
 .arco-modal {
   background-color: var(--color-panel-bg) !important;
   border: 1px solid var(--color-line) !important;
@@ -199,6 +207,8 @@ html[data-theme='dark'] .arco-slider-track {
 .arco-modal-footer {
   border-top: 1px solid var(--color-line-soft) !important;
 }
+/* simple 模式下 Arco 默认 margin-top: 32px; 按钮区在其基础上再下移 5px,
+ * 并补回内边距(Arco 在 simple 模式将其清零), 避免按钮紧贴分隔线 */
 .arco-modal-simple .arco-modal-footer {
   margin-top: 37px !important;
   padding-top: 12px !important;
@@ -214,20 +224,23 @@ html[data-theme='dark'] .arco-slider-track {
   background-color: color-mix(in srgb, var(--color-text-main) 6%, transparent) !important;
   color: var(--color-text-main) !important;
 }
+/* 确定键用危险玫红, 契合安全警告语义, 两主题下均保持可读 */
 .arco-modal-footer .arco-btn-primary {
   background-color: #e11d48 !important;
   border: none !important;
   color: #ffffff !important;
   border-radius: 6px !important;
   font-size: 11px !important;
-  box-shadow: none !important;
+  box-shadow: 0 0 10px rgba(225, 29, 72, 0.3) !important;
 }
 .arco-modal-footer .arco-btn-primary:hover {
   background-color: #f43f5e !important;
 }
+/* 深色下遮罩加深; 浅色保持 Arco 原生遮罩 */
 html:not([data-theme='light']) .arco-modal-mask {
   background-color: rgba(0, 0, 0, 0.5) !important;
 }
+/* 弹窗内数字输入框(风扇曲线编辑器)主题化; 前置标签复用 arco-input-prepend 类 */
 .arco-modal .arco-input-number {
   background-color: var(--color-panel-elevated) !important;
   border: 1px solid var(--color-line-soft) !important;
@@ -242,13 +255,14 @@ html:not([data-theme='light']) .arco-modal-mask {
   font-size: 11px !important;
 }
 
-/* ===== 设置卡片弹出动画 ===== */
+/* ===== 设置卡片弹出动画: 用于 v-if / visibleWhen 显隐的开关卡片 (配合 <transition name="card-pop">) ===== */
 .card-pop-enter-active {
   animation: card-pop-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .card-pop-leave-active {
   animation: card-pop-out 0.2s ease forwards;
 }
+/* TransitionGroup: 兄弟卡片随插入/移除平滑补位 */
 .card-pop-move {
   transition: transform 0.3s ease;
 }
