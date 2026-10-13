@@ -45,6 +45,8 @@ public static class ConfigSerializer
     private static readonly Version OsdInstantVersion = new("10.19.67");
     // 静音档：CPU 上限 4.75GHz、风扇上限 3000RPM（仅覆盖旧默认值）。
     private static readonly Version QuietTuneVersion = new("10.19.71");
+    // 默认 CPU 档改为静音（saving）；旧配置仍停在 default 的迁过去。
+    private static readonly Version QuietDefaultProfileVersion = new("10.19.72");
 
     public static string ConfigDir { get; set; } = Path.Combine(AppContext.BaseDirectory, "config");
     public static string ConfigPath => Path.Combine(ConfigDir, FileName);
@@ -228,6 +230,13 @@ public static class ConfigSerializer
                 saving.CpuMaxFrequency = 4750;
             if (LowConfig.Fan.QuietModeFanRpm == 2700)
                 LowConfig.Fan.QuietModeFanRpm = 3000;
+        }
+
+        // 升级到 10.19.72+：默认档改为静音；仍停在出厂 default 的改为 saving。
+        if (!Version.TryParse(LowConfig.Version, out oldVersion) || oldVersion < QuietDefaultProfileVersion)
+        {
+            if (LowConfig.Cpu.CpuProfile is "default" or null or "")
+                LowConfig.Cpu.CpuProfile = "saving";
         }
 
         // 默认无损迁移

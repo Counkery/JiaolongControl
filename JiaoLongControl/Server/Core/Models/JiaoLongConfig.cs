@@ -75,8 +75,8 @@ public class AppSection
 
 public class CpuSection
 {
-    [ConfigComment("当前选中档位: default / performance / saving / custom")]
-    public string CpuProfile { get; set; } = "default";
+    [ConfigComment("当前选中档位: default / performance / saving / custom（出厂默认静音 saving）")]
+    public string CpuProfile { get; set; } = "saving";
 
     [ConfigComment("游戏均衡档 (Default): 蛟龙16Pro 2023 / 7945HX 双烤约 75–80W")]
     public CpuProfileData Default { get; set; } = CpuProfilePresets.Game();

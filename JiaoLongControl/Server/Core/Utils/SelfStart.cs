@@ -1,9 +1,15 @@
+using JiaoLongControl.Server.Core.Controllers;
+using JiaoLongControl.Server.Core.Models;
+using JiaoLongControl.Server.Core.Services;
 using JiaoLongControl.Server.Interop;
+using log4net;
 
 namespace JiaoLongControl.Server.Core.Utils;
 
 public class SelfStart
 {
+    private static readonly ILog Logger = LogManager.GetLogger(typeof(SelfStart));
+
     public SelfStart()
     {
         var bridge = Bridge.Instance;
@@ -31,6 +37,48 @@ public class SelfStart
         {
             bridge.CpuPowerKeepAlive.SyncFromConfig();
             bridge.CpuPowerKeepAlive.Start();
+        }
+
+        // 默认档为静音：冷启动/恢复后若无便携/安静日常瞬时场景，则切到 Quiet + saving
+        EnsureDefaultQuietMode();
+    }
+
+    /// <summary>
+    /// 出厂默认静音：EC Quiet + CPU saving + 静音风扇上限。
+    /// 已在 QuietDaily / Portable135 瞬时会话中时跳过，避免冲掉场景。
+    /// </summary>
+    private static void EnsureDefaultQuietMode()
+    {
+        try
+        {
+            var bridge = Bridge.Instance;
+            if (bridge.CpuPowerKeepAlive.HasTransientOverride)
+                return;
+
+            // 仅当当前配置档为静音（或尚未写入）时强制对齐 EC，避免用户手选高性能后每次 Resume 被打回
+            var profile = bridge.Config.Cpu.CpuProfile;
+            if (profile is not ("saving" or null or ""))
+                return;
+
+            bridge.Config.Cpu.CpuProfile = "saving";
+            var current = MethodServices.GetValue<SystemPerMode>(MethodName.SystemPerMode);
+            if (current != SystemPerMode.QuietMode)
+            {
+                if (!MethodServices.SetValue(MethodName.SystemPerMode, SystemPerMode.QuietMode))
+                {
+                    Logger.Warn("默认静音：写入 EC Quiet 失败");
+                    return;
+                }
+            }
+
+            OsdController.Instance?.NoteExpectedPerfMode(SystemPerMode.QuietMode);
+            // 已是 Quiet 也要再绑一次风扇/CPU，保证上限与档位一致
+            PerformanceModeBindings.OnModeChanged(SystemPerMode.QuietMode);
+            try { ConfigSerializer.Save(bridge.Config); } catch { /* ignore */ }
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"默认静音对齐失败: {ex.Message}");
         }
     }
 
