@@ -11,7 +11,14 @@ namespace JiaoLongControl.Server.Core.Controllers
         {
             try
             {
-                url = url.Trim() ?? "";
+                // 参数为 null 时 url.Trim() 会先抛 NullReferenceException, 兜不住类型问题;
+                // 先判空再 Trim, 保证返回的是明确的参数错误
+                if (string.IsNullOrWhiteSpace(url))
+                {
+                    return new CommandResult(false, "无效的链接地址");
+                }
+
+                url = url.Trim();
                 if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
                     (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
                 {
@@ -91,7 +98,7 @@ namespace JiaoLongControl.Server.Core.Controllers
                         }
                         if (string.IsNullOrEmpty(speed) && item["Speed"] != null)
                         {
-                            speed = item["Speed"].ToString();
+                            speed = item["Speed"]?.ToString() ?? "";
                         }
                     }
                 }

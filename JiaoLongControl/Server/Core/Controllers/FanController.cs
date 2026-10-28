@@ -124,7 +124,7 @@ public class FanController : Blding64
         return new CommandResult(false, "设置失败");
     }
 
-    public CommandResult RemoveFanSpeed() => RestoreEcAutoFan();
+    public new CommandResult RemoveFanSpeed() => RestoreEcAutoFan();
 
     /// <summary>只清 Blding 强制转速，不动 WMI 上限开关。</summary>
     public void ClearForcedSpeed()

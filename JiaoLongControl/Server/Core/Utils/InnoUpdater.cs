@@ -10,7 +10,12 @@ namespace JiaoLongControl.Server.Core.Utils
     {
         private readonly ILog Logger= LogManager.GetLogger(typeof(InnoUpdater));
         private readonly string _currentVersion;
-        private const string RepoApiUrl = "https://api.github.com/repos/GaoXanSheng/JiaolongControl/releases/latest";
+
+        /// <summary>本 fork 的发布仓库（便携 zip 由 .github/workflows/release.yml 生成）。</summary>
+        private const string RepoApiUrl = "https://api.github.com/repos/Counkery/JiaolongControl/releases/latest";
+
+        /// <summary>本 fork 便携包的命名后缀，避免误匹配其它形态的产物。</summary>
+        private const string PortableAssetSuffix = "-win-x64.zip";
 
         public InnoUpdater(string currentVersion)
         {
@@ -45,13 +50,16 @@ namespace JiaoLongControl.Server.Core.Utils
                 foreach (var asset in assets.EnumerateArray())
                 {
                     string assetName = asset.GetProperty("name").GetString() ?? "";
-                    if (assetName.EndsWith("_Setup.exe", StringComparison.OrdinalIgnoreCase))
-                    {
-                        downloadUrl = asset.GetProperty("browser_download_url").GetString() ?? "";
-                        break;
-                    }
+                    if (!assetName.EndsWith(PortableAssetSuffix, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    downloadUrl = asset.GetProperty("browser_download_url").GetString() ?? "";
+                    break;
                 }
-                if (string.IsNullOrEmpty(downloadUrl)) return;
+                if (string.IsNullOrEmpty(downloadUrl))
+                {
+                    Logger.Info($"最新 release {latestVersion} 未附带 {PortableAssetSuffix}，跳过更新提示");
+                    return;
+                }
                 bool shouldUpdate = false;
                 bool shouldSkip = false;
                 string downloadPath = "";
@@ -81,12 +89,42 @@ namespace JiaoLongControl.Server.Core.Utils
 
                 if (shouldUpdate)
                 {
-                    ExecuteInstaller(downloadPath);
+                    // 本 fork 发布的是便携 zip，无法静默安装：定位到文件，由用户解压覆盖
+                    if (downloadPath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                        RevealPortablePackage(downloadPath);
+                    else
+                        ExecuteInstaller(downloadPath);
                 }
             }
             catch (Exception ex)
             {
                 Logger.Info($"更新检查失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>便携包已下载：打开资源管理器定位到 zip，并提示手动解压覆盖。</summary>
+        private void RevealPortablePackage(string filePath)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"/select,\"{filePath}\"",
+                    UseShellExecute = true
+                });
+
+                MessageBox.Show(
+                    $"更新包已下载到:\n{filePath}\n\n" +
+                    "请先退出本程序，再把 zip 内的文件解压覆盖到原目录（config 目录可保留）。",
+                    "便携包已下载",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"打开下载位置失败: {ex.Message}\n\n文件位置: {filePath}",
+                    "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
 

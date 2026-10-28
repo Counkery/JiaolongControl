@@ -13,6 +13,9 @@ namespace JiaoLongControl.Server.Core.Controllers
     [ClassInterface(ClassInterfaceType.AutoDual)]
     public class NvidiaGpuController : IDisposable
     {
+        // NVAPI 只给 0-100 的风扇档位, 换算成转速用的经验上限 (蛟龙16Pro 2023 / 4060)
+        private const int MaxFanRpm = 6800;
+
         public NvidiaGpuController()
         {
             NVIDIA.Initialize();
@@ -39,6 +42,7 @@ namespace JiaoLongControl.Server.Core.Controllers
             try
             {
                 var gpu = GetGPU(gpuIndex);
+                var fan = GetGpuFanSpeed(gpuIndex);
                 var stats = new GpuStatsInfo
                 {
                     GpuName = gpu.FullName,
@@ -51,7 +55,7 @@ namespace JiaoLongControl.Server.Core.Controllers
                     CoreClock = ((int)(gpu.CurrentClockFrequencies.GraphicsClock.Frequency / 1000)).ToString(),
                     MemoryClock = ((int)(gpu.CurrentClockFrequencies.MemoryClock.Frequency / 1000)).ToString(),
                     GpuTemperature = gpu.ThermalInformation.ThermalSensors.First().CurrentTemperature.ToString(),
-                    FanSpeed = GetGpuFanSpeed(gpuIndex).Data.ToString() ?? "0"
+                    FanSpeed = fan.Success && fan.Data != null ? fan.Data.ToString() ?? "0" : "0"
                 };
                 return new CommandResult(true, "获取成功", stats);
             }
@@ -102,7 +106,7 @@ namespace JiaoLongControl.Server.Core.Controllers
                 string name = obj["Name"]?.ToString() ?? "";
                 if (!name.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase))
                     continue;
-                string dateStr = obj["DriverDate"]?.ToString();
+                string? dateStr = obj["DriverDate"]?.ToString();
                 if (string.IsNullOrEmpty(dateStr))
                     continue;
                 var date = ManagementDateTimeConverter.ToDateTime(dateStr);
@@ -177,16 +181,25 @@ namespace JiaoLongControl.Server.Core.Controllers
 
         public CommandResult GetGpuFanSpeed(int gpuIndex = -1)
         {
-            try { return new CommandResult(true, "获取成功", (int)GetGPU(gpuIndex).CoolerInformation.Coolers.First().CurrentLevel); }
+            // 优先取 EC 报的真实转速 (RPM)。NVAPI 的 Coolers.CurrentLevel 只是 0-100 的档位,
+            // 早先直接当 RPM 显示, 页面上就出现 "67 RPM" 这种假值。
+            try
+            {
+                var fan = Bridge.Instance.Fan.GetFanSpeed();
+                if (fan.Success && fan.Data is FanSpeedInfo info && info.GPUFanSpeed is > 0 and < 10000)
+                    return new CommandResult(true, "获取成功", info.GPUFanSpeed);
+            }
             catch
             {
-                try
-                {
-                    int ecFan = ((FanSpeedInfo)Bridge.Instance.Fan.GetFanSpeed().Data).GPUFanSpeed;
-                    return new CommandResult(true, "获取成功", ecFan);
-                }
-                catch (Exception ex) { return new CommandResult(false, ex.Message); }
             }
+
+            try
+            {
+                int level = (int)GetGPU(gpuIndex).CoolerInformation.Coolers.First().CurrentLevel;
+                int rpm = (int)Math.Round(level / 100.0 * MaxFanRpm);
+                return new CommandResult(true, "获取成功", rpm);
+            }
+            catch (Exception ex) { return new CommandResult(false, ex.Message); }
         }
 
         public CommandResult GetGpuCoreClockRange(int gpuIndex = -1)
@@ -356,7 +369,7 @@ namespace JiaoLongControl.Server.Core.Controllers
 
         #region GPU 曲线调校 (NVAPI ClkVfPoints — 移植自 vuplea/simple-nvidia-undervolt, MIT)
 
-        private CommandResult? _curveCapsCache;
+        private readonly Dictionary<int, CommandResult> _curveCapsCache = new();
 
         /// <summary>曲线调校用的物理 GPU 句柄 (NVAPI 枚举序)。</summary>
         private IntPtr GetCurveGpu(int gpuIndex)
@@ -374,8 +387,9 @@ namespace JiaoLongControl.Server.Core.Controllers
         /// </summary>
         public CommandResult GetGpuCurveCapabilities(int gpuIndex = -1)
         {
-            if (_curveCapsCache != null)
-                return _curveCapsCache;
+            int cacheKey = ResolveGpuIndex(gpuIndex);
+            if (_curveCapsCache.TryGetValue(cacheKey, out var cached))
+                return cached;
 
             CommandResult result;
             try
@@ -418,7 +432,9 @@ namespace JiaoLongControl.Server.Core.Controllers
                 result = new CommandResult(false, $"曲线调校能力探测失败: {ex.Message}");
             }
 
-            _curveCapsCache = result;
+            // 只缓存成功结果: 驱动临时不可用时不把失败固化到进程退出
+            if (result.Success)
+                _curveCapsCache[cacheKey] = result;
             return result;
         }
 

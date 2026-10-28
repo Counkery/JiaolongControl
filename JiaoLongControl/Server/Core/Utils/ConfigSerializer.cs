@@ -73,7 +73,7 @@ public static class ConfigSerializer
         try
         {
             var yaml = File.ReadAllText(ConfigPath);
-            return Deserializer.Deserialize<JiaoLongConfig>(yaml);
+            return Deserializer.Deserialize<JiaoLongConfig>(yaml) ?? new JiaoLongConfig();
         }
         catch (Exception)
         {
@@ -82,7 +82,7 @@ public static class ConfigSerializer
                 try
                 {
                     var yaml = File.ReadAllText(BackupPath);
-                    return Deserializer.Deserialize<JiaoLongConfig>(yaml);
+                    return Deserializer.Deserialize<JiaoLongConfig>(yaml) ?? new JiaoLongConfig();
                 }
                 catch
                 {
@@ -115,7 +115,7 @@ public static class ConfigSerializer
         }
 
         var existing = Load();
-        // 如果配置文件版本字段不存在 删除重建
+        // 版本字段缺失: 旧配置无法迁移, 删除后按当前版本重建, 并且不要再拿旧对象 Update 覆盖
         if (string.IsNullOrWhiteSpace(existing.Version))
         {
             if (File.Exists(ConfigPath))
@@ -123,6 +123,7 @@ public static class ConfigSerializer
                 File.Delete(ConfigPath);
             }
             Save(new JiaoLongConfig { Version = version });
+            return;
         }
         // 如果配置文件存在但版本不一致
         if (existing.Version != version )

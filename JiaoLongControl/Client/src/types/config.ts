@@ -102,8 +102,6 @@ export interface SmuSectionType {
   PptLimitRsmu: number
   VrmCurrentMp1: number
   VrmCurrentRsmu: number
-  TdcLimitMp1: number
-  TdcLimitRsmu: number
   EdcLimitMp1: number
   EdcLimitRsmu: number
   TempLimitMp1: number

@@ -25,10 +25,9 @@ export const useConfigStore = defineStore('config', {
     async fetchConfig(force = false) {
       if (this.config && !force) return
 
-      if (fetchPromise) {
-        await fetchPromise.catch(() => {})
-        if (fetchPromise) return fetchPromise
-      }
+      // 复用进行中的请求。注意不能在 await 之后再判断 fetchPromise：
+      // 它会在 finally 里被置空，那样必然会再发一次请求（启动时重复 GetConfig）。
+      if (fetchPromise) return fetchPromise
 
       this.loading = true
       fetchPromise = (async () => {

@@ -271,16 +271,9 @@ namespace JiaoLongControl.Server.Core.Controllers
                 var voltage = ReadCoreVoltage();
                 if (voltage.HasValue)
                     return new CommandResult(true, "获取成功", Math.Round(voltage.Value, 3));
-                using var searcher = new ManagementObjectSearcher("SELECT CurrentVoltage FROM Win32_Processor");
-                foreach (var obj in searcher.Get())
-                {
-                    ushort raw = Convert.ToUInt16(obj["CurrentVoltage"]);
-                    if (raw > 0)
-                    {
-                        double volts = (raw & 0xFF) / 10.0;
-                        return new CommandResult(true, "获取成功", Math.Round(volts, 3));
-                    }
-                }
+                var wmiVoltage = ReadWmiVoltage();
+                if (wmiVoltage.HasValue)
+                    return new CommandResult(true, "获取成功", Math.Round(wmiVoltage.Value, 3));
                 return new CommandResult(false, "CPU 电压不可用");
             }
             catch (Exception ex)
@@ -414,6 +407,36 @@ namespace JiaoLongControl.Server.Core.Controllers
             }
         }
 
+        /// <summary>
+        /// 读取 Win32_Processor.CurrentVoltage (单位 0.1V)。
+        /// 该字段有两种编码: bit7 置位时电压在高字节, 否则在低 7 位。
+        /// 早先直接取 (raw &amp; 0xFF) 会在 bit7 置位时读出 13.7V 之类的假值。
+        /// </summary>
+        private static double? ReadWmiVoltage()
+        {
+            try
+            {
+                using var searcher = new ManagementObjectSearcher("SELECT CurrentVoltage FROM Win32_Processor");
+                foreach (var obj in searcher.Get())
+                {
+                    ushort raw = Convert.ToUInt16(obj["CurrentVoltage"]);
+                    if (raw == 0)
+                        continue;
+                    if ((raw & 0x80) != 0)
+                        raw >>= 8;
+                    else
+                        raw &= 0x7F;
+                    if (raw > 0)
+                        return raw / 10.0;
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+
         private uint GetBaseFrequency()
         {
             if (_cachedBaseMhz is > 0)
@@ -449,16 +472,9 @@ namespace JiaoLongControl.Server.Core.Controllers
                 }
                 else
                 {
-                    using var searcher2 = new ManagementObjectSearcher("SELECT CurrentVoltage FROM Win32_Processor");
-                    foreach (var obj2 in searcher2.Get())
-                    {
-                        ushort raw2 = Convert.ToUInt16(obj2["CurrentVoltage"]);
-                        if (raw2 > 0)
-                        {
-                            stats.Voltage = Math.Round((raw2 & 0xFF) / 10.0, 3);
-                            break;
-                        }
-                    }
+                    var wmiVoltage = ReadWmiVoltage();
+                    if (wmiVoltage.HasValue)
+                        stats.Voltage = Math.Round(wmiVoltage.Value, 3);
                 }
                 
                 return new CommandResult(true, "获取成功", stats);

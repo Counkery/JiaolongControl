@@ -92,10 +92,11 @@ async function handleGradientToggle(newValue: string | number | boolean) {
       }
     } else {
       const res = await KeyboardGradient.Stop()
-      gradientRunning.value = false
       if (res.Success) {
+        gradientRunning.value = false
         Message.info(res.Message || '键盘渐变已停止')
       } else {
+        // 停止失败时不能翻转界面状态, 否则显示「已停止」但灯仍在跑
         Message.error(res.Message || '渐变停止失败')
       }
     }

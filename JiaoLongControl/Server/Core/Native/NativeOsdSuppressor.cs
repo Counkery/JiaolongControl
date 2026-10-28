@@ -20,11 +20,18 @@ internal static class NativeOsdSuppressor
     private static readonly ConcurrentDictionary<int, byte> SuspendedUtilityPids = new();
 
     private static CancellationTokenSource? _cts;
+    private static Task? _task;
     private static int _logged;
     private static int _suspendLogged;
 
     private const uint ProcessSuspendResume = 0x0800;
     private const uint ProcessQueryLimited = 0x1000;
+
+    /// <summary>找到厂家 OSD 进程时的轮询间隔（需要及时压制）。</summary>
+    private const int PollFastMs = 200;
+
+    /// <summary>没有厂家 OSD 进程时的轮询间隔（多见于已卸载原厂软件的机器）。</summary>
+    private const int PollIdleMs = 1000;
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern IntPtr OpenProcess(uint desiredAccess, bool inheritHandle, int processId);
@@ -42,16 +49,30 @@ internal static class NativeOsdSuppressor
     public static void Start()
     {
         if (_cts != null) return;
+
+        // 上次被强杀/崩溃时可能把厂家 OSD 留在挂起态（挂起计数不会随进程消失而清零），
+        // 先恢复一次再重新压制，避免「原厂 Fn 提示再也不出现」且计数越叠越多。
+        ResumeStaleUtilities();
+
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
-        Task.Factory.StartNew(() => Loop(token), token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        _task = Task.Factory.StartNew(() => Loop(token), token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
     }
 
     public static void Stop()
     {
         try { _cts?.Cancel(); }
         catch { /* ignore */ }
+
+        // 等轮询线程退出再恢复，否则它可能在恢复之后又挂起一次
+        try { _task?.Wait(1500); }
+        catch { /* ignore */ }
+
+        try { _cts?.Dispose(); }
+        catch { /* ignore */ }
+
         _cts = null;
+        _task = null;
         ResumeAllUtilities();
     }
 
@@ -59,14 +80,20 @@ internal static class NativeOsdSuppressor
     {
         while (!token.IsCancellationRequested)
         {
+            int waitMs = PollIdleMs;
             try
             {
                 var osd = Bridge.Instance.Config.Osd;
                 bool suppressFactory = osd.Enabled || osd.SuppressNativeVolumeOsd;
                 if (suppressFactory)
-                    SuppressFactoryOsdProcess();
+                {
+                    // 厂家 OSD 已卸载时不必高频枚举进程，按是否找到进程自适应
+                    waitMs = SuppressFactoryOsdProcess() ? PollFastMs : PollIdleMs;
+                }
                 else
+                {
                     ResumeAllUtilities();
+                }
 
                 if (osd.SuppressNativeVolumeOsd)
                     User32.EnumWindows(EnumProc, IntPtr.Zero);
@@ -77,26 +104,61 @@ internal static class NativeOsdSuppressor
                     Logger.Warn($"屏蔽旧 OSD 轮询异常: {ex.Message}");
             }
 
-            token.WaitHandle.WaitOne(80);
+            token.WaitHandle.WaitOne(waitMs);
         }
 
         ResumeAllUtilities();
+    }
+
+    /// <summary>启动时清理历史残留：对现存厂家 OSD 进程各恢复一次挂起计数。</summary>
+    private static void ResumeStaleUtilities()
+    {
+        Process[] list;
+        try { list = Process.GetProcessesByName("BLDFnHotkeyUtility"); }
+        catch { return; }
+
+        foreach (var p in list)
+        {
+            try
+            {
+                IntPtr handle = OpenProcess(ProcessSuspendResume | ProcessQueryLimited, false, p.Id);
+                if (handle == IntPtr.Zero) continue;
+                try
+                {
+                    NtResumeProcess(handle);
+                    Logger.Info($"启动时恢复残留挂起的厂家 OSD 进程 (pid={p.Id})");
+                }
+                finally
+                {
+                    CloseHandle(handle);
+                }
+            }
+            catch
+            {
+                /* 单个进程失败不影响其它 */
+            }
+            finally
+            {
+                try { p.Dispose(); } catch { /* ignore */ }
+            }
+        }
     }
 
     /// <summary>
     /// 厂家 OSD 进程在 System IL，藏窗会被 UIPI 拒绝；挂起进程即可阻止 Caps/Fn 旧 OSD。
     /// 若窗口已显示，先结束进程清掉残影，服务约数秒后会拉起新实例再挂起。
     /// </summary>
-    private static void SuppressFactoryOsdProcess()
+    /// <returns>是否发现厂家 OSD 进程（供轮询间隔自适应）。</returns>
+    private static bool SuppressFactoryOsdProcess()
     {
         Process[] list;
         try { list = Process.GetProcessesByName("BLDFnHotkeyUtility"); }
-        catch { return; }
+        catch { return false; }
 
         if (list.Length == 0)
         {
             PruneDeadSuspendedPids();
-            return;
+            return false;
         }
 
         foreach (var p in list)
@@ -126,6 +188,7 @@ internal static class NativeOsdSuppressor
         }
 
         PruneDeadSuspendedPids();
+        return true;
     }
 
     private static void SuspendUtility(int pid)

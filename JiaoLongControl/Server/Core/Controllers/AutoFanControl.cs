@@ -139,11 +139,34 @@ public class AutoFanControl : IDisposable
                     loopStamp = Stopwatch.GetTimestamp();
                     dtSec = Math.Clamp(dtSec, 0.05, 3.0);
 
-                    float rawCpuTemp = Convert.ToSingle(Bridge.Instance.CPU.GetCPUThermometer().Data);
+                    var cpuTempResult = Bridge.Instance.CPU.GetCPUThermometer();
+                    if (!cpuTempResult.Success || cpuTempResult.Data == null)
+                    {
+                        Task.Delay(IntervalMs, token).Wait(token);
+                        continue;
+                    }
+
+                    float rawCpuTemp = Convert.ToSingle(cpuTempResult.Data);
+                    // 读表失败时 EC 会回 0 或 255, 直接进曲线会把风扇打到最低或满转
+                    if (rawCpuTemp <= 0 || rawCpuTemp >= 150)
+                    {
+                        Task.Delay(IntervalMs, token).Wait(token);
+                        continue;
+                    }
+
                     float smoothedCpuTemp = UpdateSmoothedTemp(FanType.CPU, rawCpuTemp);
 
+                    // 无独显温度时沿用 CPU 温度（共享热管同步策略依赖这一点），
+                    // 但只接受 0-150 之间的合法读数, 避免异常值污染 GPU 曲线平滑值
                     var gpuTempResult = Bridge.Instance.NvidiaGpu.GetGpuTemperature();
-                    float rawGpuTemp = gpuTempResult.Success ? Convert.ToSingle(gpuTempResult.Data) : smoothedCpuTemp; 
+                    float rawGpuTemp = smoothedCpuTemp;
+                    if (gpuTempResult.Success && gpuTempResult.Data != null)
+                    {
+                        float candidateGpuTemp = Convert.ToSingle(gpuTempResult.Data);
+                        if (candidateGpuTemp > 0 && candidateGpuTemp < 150)
+                            rawGpuTemp = candidateGpuTemp;
+                    }
+
                     float smoothedGpuTemp = UpdateSmoothedTemp(FanType.GPU, rawGpuTemp);
                     int targetCpuByte = CalculateFanSpeed(smoothedCpuTemp, FanType.CPU);
                     int targetGpuByte = CalculateFanSpeed(smoothedGpuTemp, FanType.GPU);

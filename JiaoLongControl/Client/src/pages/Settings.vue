@@ -79,7 +79,8 @@ const advancedToggleCards: ToggleCard[] = [
 
 const visibleBootCards = computed(() => {
   const config = configStore.config
-  return bootToggleCards.filter((card) => !card.visibleWhen || !config || card.visibleWhen(config))
+  // 配置未加载完成时一律不显示依赖卡片, 避免首屏闪出后消失
+  return bootToggleCards.filter((card) => !card.visibleWhen || (!!config && card.visibleWhen(config)))
 })
 </script>
 

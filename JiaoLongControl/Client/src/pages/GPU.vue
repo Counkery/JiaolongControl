@@ -80,7 +80,9 @@ const memUtilChart = computed(() => generateSvgPath(memUtilHistory.value, 100))
 const coreClockChart = computed(() => generateSvgPath(coreClockHistory.value, 30)) // Corresponds to 3000 MHz
 const memClockChart = computed(() => generateSvgPath(memClockHistory.value, 100)) // Corresponds to 10000 MHz
 const tempChart = computed(() => generateSvgPath(tempHistory.value, 100))
-const fanChart = computed(() => generateSvgPath(fanSpeedHistory.value, 40)) // Corresponds to 4000 RPM
+// 后端 GetGpuFanSpeed 现在给真实 RPM（EC 优先，NVAPI 回退按 6800 换算）；
+// updateHistory 里除以 100，所以这里把满量程 5800 RPM 记作 58
+const fanChart = computed(() => generateSvgPath(fanSpeedHistory.value, 58))
 
 // --- Settings and Presets Logic ---
 const GPUData = computed(() => configStore.config?.Gpu)

@@ -2,6 +2,10 @@ import { defineStore } from 'pinia'
 import { CPU, Fan, NvidiaGpu, type FanSpeedInfo, type GpuStats } from '@/utils/bridge'
 import { POLL_INTERVAL_SYSTEM_INFO } from '@/constants'
 
+// 轮询重入保护与静态 GPU 信息去重（放模块级，避免污染 state 类型）
+let fetching = false
+let staticGpuPromise: Promise<void> | null = null
+
 export interface CpuStatsInfo {
   FrequencyMhz: number
   Voltage: number
@@ -60,6 +64,16 @@ export const useSystemInfoStore = defineStore('systemInfo', {
 
     async fetchStaticGpu() {
       if (this.staticGpuLoaded) return
+      if (staticGpuPromise) return staticGpuPromise
+      staticGpuPromise = this.loadStaticGpu()
+      try {
+        await staticGpuPromise
+      } finally {
+        staticGpuPromise = null
+      }
+    },
+
+    async loadStaticGpu() {
       const [gpuName, gpuDriverVersion, gpuDriverDate, gpuMemoryTotal, gpuBusWidth] =
         await Promise.all([
           NvidiaGpu.GetGpuName(),
@@ -86,7 +100,9 @@ export const useSystemInfoStore = defineStore('systemInfo', {
     },
 
     async fetchSystemInfo() {
-      if (this.pollingPaused) return
+      // 硬件调用可能慢于轮询间隔, 不加重入保护会导致请求叠加
+      if (this.pollingPaused || fetching) return
+      fetching = true
       this.loading = true
       try {
         if (!this.staticGpuLoaded) await this.fetchStaticGpu()
@@ -151,6 +167,7 @@ export const useSystemInfoStore = defineStore('systemInfo', {
       } catch (err) {
         this.error = err instanceof Error ? err.message : 'Failed to fetch system info'
       } finally {
+        fetching = false
         this.loading = false
       }
     },

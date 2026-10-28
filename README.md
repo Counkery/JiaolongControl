@@ -12,7 +12,7 @@
   <a href="https://github.com/GaoXanSheng/JiaolongControl">
     <img src="https://img.shields.io/badge/upstream-GaoXanSheng-555?logo=github" alt="Upstream">
   </a>
-  <img src="https://img.shields.io/badge/version-10.19.50-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-10.19.75-blue" alt="Version">
   <img src="https://img.shields.io/badge/.NET-8.0_WPF-512BD4?logo=dotnet" alt=".NET">
   <img src="https://img.shields.io/badge/Vue-3.5-4FC08D?logo=vuedotjs" alt="Vue">
   <img src="https://img.shields.io/badge/WebView2-前端宿主-0078D7?logo=microsoftedge&logoColor=white" alt="WebView2">
@@ -22,7 +22,7 @@
   </a>
 </p>
 
-本仓库是 [GaoXanSheng/JiaolongControl](https://github.com/GaoXanSheng/JiaolongControl) 的 fork。日常开发在 **`remake/jiaolong-control`**。当前版本 **10.19.50**（见 `JiaoLongControl/JiaoLongControl.csproj` 的 `AppVersion`）。
+本仓库是 [GaoXanSheng/JiaolongControl](https://github.com/GaoXanSheng/JiaolongControl) 的 fork。日常开发在 **`remake/jiaolong-control`**。当前版本 **10.19.75**（见 `JiaoLongControl/JiaoLongControl.csproj` 的 `AppVersion`）。
 
 架构：.NET 8 WPF 宿主 + WebView2 + Vue 3。硬件走 **PawnIO**（Ryzen SMU）和随包 **Blding / `JiaoLongDriver64`**（EC / 风扇），不用 WinRing0。
 
@@ -99,7 +99,7 @@ dotnet publish JiaoLongControl/JiaoLongControl.csproj -c Release
 
 ### 版本号
 
-唯一来源是 `JiaoLongControl/JiaoLongControl.csproj` 的 `AppVersion`（当前 `10.19.50`）。
+唯一来源是 `JiaoLongControl/JiaoLongControl.csproj` 的 `AppVersion`（当前 `10.19.75`）。
 
 | 段 | 含义 |
 | --- | --- |
@@ -115,7 +115,7 @@ dotnet publish JiaoLongControl/JiaoLongControl.csproj -c Release
 
 上游：[GaoXanSheng/JiaolongControl](https://github.com/GaoXanSheng/JiaolongControl)（分支 `windows/X86-64`）。本 fork 在其架构上针对 7945HX + 4060 做稳定性与日常可用性改造，**未改协议栈选型**（仍是 PawnIO + Blding + WMI）。
 
-| 维度 | 上游 | 本 fork（10.19.50） |
+| 维度 | 上游 | 本 fork（10.19.75） |
 | --- | --- | --- |
 | 性能模式 | Quiet / Balance / Performance | 同左 + **一键安静日常**（瞬时功耗/风扇/软调度，不写坏 Default） |
 | CPU 预设 | 通用配置字段 | **7945HX A/B/C**（45/78/90W 档）+ 切模式联动 |

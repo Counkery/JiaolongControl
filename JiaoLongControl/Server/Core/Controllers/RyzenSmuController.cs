@@ -442,6 +442,9 @@ public class RyzenSmuController : PawnIO
 
     private const uint MsrFidvidStatus = 0xC0010293;
 
+    // 亲和性掩码是 64 位, 逻辑核超过 64 时 1L << i 会溢出
+    private const int MaxAffinityCores = 64;
+
     public double? GetCoreVoltage()
     {
         try
@@ -454,7 +457,7 @@ public class RyzenSmuController : PawnIO
             try
             {
                 double? minVolts = null;
-                int coreCount = Environment.ProcessorCount;
+                int coreCount = Math.Min(Environment.ProcessorCount, MaxAffinityCores);
                 for (int i = 0; i < coreCount; i++)
                 {
                     IntPtr prev = Kernel32.SetThreadAffinityMask(thread, new IntPtr(1L << i));
@@ -515,10 +518,12 @@ public class RyzenSmuController : PawnIO
         try
         {
             double ppt = 0;
-            double tdc = 0;
-            double edc = 0;
+            double? tdc = null;
+            double? edc = null;
             double temp = 0;
             double freq = 0;
+            double coreFreq = 0;
+            double busFreq = 0;
             int usage = 0;
             try
             {
@@ -541,8 +546,14 @@ public class RyzenSmuController : PawnIO
                             case SensorType.Power:
                                 if (sensor.Name.Contains("Package") && ppt == 0)
                                     ppt = Math.Round(val, 1);
-                                if (sensor.Name.Contains("Core") && tdc == 0)
+                                break;
+
+                            case SensorType.Current:
+                                // TDC/EDC 是电流传感器, 不是 Power; 读不到就留 null, 不再用 TDC*1.3 估算
+                                if (tdc == null && sensor.Name.Contains("TDC"))
                                     tdc = Math.Round(val, 1);
+                                else if (edc == null && sensor.Name.Contains("EDC"))
+                                    edc = Math.Round(val, 1);
                                 break;
 
                             case SensorType.Temperature:
@@ -554,8 +565,10 @@ public class RyzenSmuController : PawnIO
                                 break;
 
                             case SensorType.Frequency:
-                                if (sensor.Name.Contains("Core #1") || sensor.Name.Contains("Bus Speed"))
-                                    freq = Math.Round(val, 0);
+                                if (sensor.Name.Contains("Core #1"))
+                                    coreFreq = Math.Round(val, 0);
+                                else if (sensor.Name.Contains("Bus Speed"))
+                                    busFreq = Math.Round(val, 0);
                                 break;
 
                             case SensorType.Load:
@@ -565,13 +578,12 @@ public class RyzenSmuController : PawnIO
                         }
                     }
 
-                    if (tdc > 0)
-                        edc = Math.Round(tdc * 1.3, 1);
+                    freq = coreFreq > 0 ? coreFreq : busFreq;
 
                     break;
                 }
             }
-            catch (Exception lhmEx)
+            catch (Exception)
             {
                 try
                 {

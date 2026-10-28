@@ -608,7 +608,7 @@ onUnmounted(() => {
               <div>
                 <span class="text-[10px] text-gray-500 block">TDC 供电电流</span>
                 <span class="text-base font-bold text-ink font-mono"
-                  >{{ (telemetry.Tdc ?? 0).toFixed(1) }}
+                  >{{ telemetry.Tdc === null ? 'N/A' : telemetry.Tdc.toFixed(1) }}
                   <span class="text-[10px] text-gray-500 font-bold">A</span></span
                 >
               </div>
@@ -641,7 +641,7 @@ onUnmounted(() => {
               <div>
                 <span class="text-[10px] text-gray-500 block">EDC 峰值电流</span>
                 <span class="text-base font-bold text-ink font-mono"
-                  >{{ (telemetry.Edc ?? 0).toFixed(1) }}
+                  >{{ telemetry.Edc === null ? 'N/A' : telemetry.Edc.toFixed(1) }}
                   <span class="text-[10px] text-gray-500 font-bold">A</span></span
                 >
               </div>

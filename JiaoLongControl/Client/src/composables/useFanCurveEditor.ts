@@ -259,7 +259,12 @@ export function useFanCurveEditor() {
 
   onUnmounted(() => {
     resizeObserver?.disconnect()
-    if (autoSaveTimer) clearTimeout(autoSaveTimer)
+    // 切页/卸载时若还有未触发的保存，立即落盘一次，避免丢掉最后一次曲线调整
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer)
+      autoSaveTimer = null
+      autoSave()
+    }
   })
 
   function onDragStart(index: number, e: MouseEvent) {

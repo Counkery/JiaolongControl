@@ -18,7 +18,7 @@ namespace JiaoLongControl.Server.Interop
             LogManager.GetLogger(typeof(Bridge));
 
         private readonly object _configLock = new();
-        private Timer _saveTimer;
+        private Timer? _saveTimer;
 
         private CoreWebView2? _webView;
 
@@ -56,7 +56,7 @@ namespace JiaoLongControl.Server.Interop
 
         public void Dispose()
         {
-            _saveTimer.Dispose();
+            _saveTimer?.Dispose();
             _saveTimer = null;
             FlushIfDirty();
             CpuPowerKeepAlive.Dispose();

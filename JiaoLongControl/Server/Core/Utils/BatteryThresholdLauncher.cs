@@ -19,9 +19,9 @@ public static class BatteryThresholdLauncher
         if (!string.IsNullOrWhiteSpace(configured))
             candidates.Add(configured.Trim());
 
+        // 只搜索通用位置, 不写死任何开发机路径
         candidates.AddRange(new[]
         {
-            Path.Combine(@"D:\Application\JiaoLong16Pro-Battery-threshold", "Windows"),
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 "Documents", "JiaoLong16Pro-Battery-threshold", "Windows"),
             Path.Combine(AppContext.BaseDirectory, "Tools", "BatteryThreshold"),

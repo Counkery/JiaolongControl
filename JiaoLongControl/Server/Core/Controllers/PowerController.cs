@@ -175,7 +175,8 @@ public class PowerController
         if (!result.Success)
             return new CommandResult(false, result.Message);
 
-        if (!TryParseLastTwoHex((string)result.Data, out var acVal, out var dcVal))
+        if (result.Data is not string queryOutput ||
+            !TryParseLastTwoHex(queryOutput, out var acVal, out var dcVal))
             return new CommandResult(false, "解析失败");
 
         return new CommandResult(
@@ -211,13 +212,19 @@ public class PowerController
             if (process == null)
                 return new CommandResult(false, $"[PowerController] 无法启动 powercfg: {arguments}");
 
-            string output = process.StandardOutput.ReadToEnd();
-            string error = process.StandardError.ReadToEnd();
+            // 必须异步读输出: 先 ReadToEnd 再 WaitForExit 时, powercfg 一旦卡住
+            // ReadToEnd 会永久阻塞, 超时判断永远到不了。
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
+
             if (!process.WaitForExit(PowerCfgTimeoutMs))
             {
                 try { process.Kill(entireProcessTree: true); } catch { /* ignore */ }
                 return new CommandResult(false, $"[PowerController] powercfg 超时 ({PowerCfgTimeoutMs}ms): {arguments}");
             }
+
+            Task.WaitAll(new Task[] { stdoutTask, stderrTask }, 1000);
+            string error = stderrTask.IsCompletedSuccessfully ? stderrTask.Result : "";
 
             if (process.ExitCode != 0)
                 return new CommandResult(false, $"[PowerController] powercfg {arguments} 失败: {error}");
@@ -248,13 +255,19 @@ public class PowerController
             if (process == null)
                 return new CommandResult(false, $"无法启动 powercfg: {arguments}");
 
-            string output = process.StandardOutput.ReadToEnd();
-            string error = process.StandardError.ReadToEnd();
+            // 同 RunPowerCfg: 先起异步读取, 再等退出, 超时才能真正生效
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
+
             if (!process.WaitForExit(PowerCfgTimeoutMs))
             {
                 try { process.Kill(entireProcessTree: true); } catch { /* ignore */ }
                 return new CommandResult(false, $"powercfg 超时 ({PowerCfgTimeoutMs}ms): {arguments}");
             }
+
+            Task.WaitAll(new Task[] { stdoutTask, stderrTask }, 1000);
+            string output = stdoutTask.IsCompletedSuccessfully ? stdoutTask.Result : "";
+            string error = stderrTask.IsCompletedSuccessfully ? stderrTask.Result : "";
 
             if (process.ExitCode != 0)
                 return new CommandResult(false, $"powercfg {arguments} 失败: {error}");

@@ -44,7 +44,8 @@ namespace JiaoLongControl.Server
                 if (args.Mode == Microsoft.Win32.PowerModes.Suspend)
                     return;
                 // 睡眠唤醒、插拔电源后马上写回频率、软调度、风扇上限、GPU 墙/锁频、Curve Optimizer。
-                Task.Run(() => CpuPowerKeepAliveService.ReapplyProcessorPolicy());
+                // force=true: 这几个场景下 Windows 会重置电源方案，必须绕过节流无条件重写。
+                Task.Run(() => CpuPowerKeepAliveService.ReapplyProcessorPolicy(force: true));
             };
 
             // 全局异常兜底：任何未处理异常都记录日志，避免闪退后无迹可查

@@ -112,7 +112,8 @@ namespace JiaoLongControl.Server
             _cts = new CancellationTokenSource();
             var token = _cts.Token;
 
-            string tempPath = Path.Combine(Path.GetTempPath(), "JiaoLongControl_Update_Setup.exe");
+            // 文件名取自下载地址, 保证 .zip 不被改成 .exe（便携包不能自动执行）
+            string tempPath = Path.Combine(Path.GetTempPath(), GetFileNameFromUrl(url));
 
             using var client = new HttpClient();
             using var response = await client.GetAsync(
@@ -163,6 +164,24 @@ namespace JiaoLongControl.Server
                     TxtDownloadStatus.Text = $"下载中... {FormatBytes(info.DownloadedBytes)}";
                 }
             });
+        }
+
+        private static string GetFileNameFromUrl(string url)
+        {
+            try
+            {
+                // 镜像地址形如 https://gh-proxy.org/<原始地址>，按最后一段取文件名
+                string noQuery = url.Split('?')[0];
+                string name = Path.GetFileName(noQuery);
+                if (!string.IsNullOrWhiteSpace(name) && name.Contains('.'))
+                    return name;
+            }
+            catch
+            {
+                // 解析失败走兜底文件名
+            }
+
+            return "JiaoLongControl-update.zip";
         }
 
         private static string FormatBytes(long bytes)

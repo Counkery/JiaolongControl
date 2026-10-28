@@ -171,16 +171,38 @@ public sealed class CpuPowerKeepAliveService : IDisposable
         if (!_running)
             return new CommandResult(true, "CPU 功耗保活未运行");
 
-        _cts?.Cancel();
-        try { _task?.Wait(3000); }
-        catch (AggregateException) { }
-        catch (Exception ex) { Logger.Warn($"停止保活异常: {ex.Message}"); }
-        finally
+        var cts = _cts;
+        var task = _task;
+
+        cts?.Cancel();
+
+        bool stopped;
+        try
         {
-            _running = false;
-            _cts?.Dispose();
-            _cts = null;
-            _task = null;
+            stopped = task?.Wait(3000) ?? true;
+        }
+        catch (AggregateException)
+        {
+            stopped = true;
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"停止保活异常: {ex.Message}");
+            stopped = true;
+        }
+
+        _running = false;
+        _cts = null;
+        _task = null;
+
+        // 线程没退出时不要 Dispose CTS: 循环里的 WaitHandle 还在用它, 释放会抛 ObjectDisposedException
+        if (stopped)
+        {
+            try { cts?.Dispose(); } catch { /* ignore */ }
+        }
+        else
+        {
+            Logger.Warn("CPU 功耗保活线程未在 3 秒内退出，跳过 CancellationTokenSource 释放");
         }
 
         Logger.Info("CPU 功耗保活已停止");
@@ -250,6 +272,14 @@ public sealed class CpuPowerKeepAliveService : IDisposable
     /// </summary>
     private static long _lastFailWarnTick;
 
+    /// <summary>电源策略重写的节流状态（见 ReapplyProcessorPolicy）。</summary>
+    private static readonly object _policyLock = new();
+    private static string? _lastPolicySignature;
+    private static long _lastPolicyAppliedTick;
+
+    /// <summary>即使目标没变，也每 5 分钟兜底重写一次（Windows 切换电源方案会清掉）。</summary>
+    private const int PolicyRebaseMs = 5 * 60 * 1000;
+
     /// <summary>
     /// 读取当前目标并下发；若下发过程中世代变化（如 QuietDaily 刚 SetTransient），立刻用新目标再写一次。
     /// </summary>
@@ -312,8 +342,36 @@ public sealed class CpuPowerKeepAliveService : IDisposable
         }
     }
 
-    /// <summary>电源方案被 Windows 改掉后，把频率上限、软调度、GPU 功耗墙写回去。</summary>
-    internal static void ReapplyProcessorPolicy()
+    /// <summary>把「会影响电源策略/GPU/CO 下发结果」的配置值压成签名，用于判断是否值得重写。</summary>
+    private static string BuildPolicySignature(
+        Bridge bridge, CpuProfileData profile, SoftScheduleData soft, string? scene)
+    {
+        var app = bridge.Config.App;
+        var gpu = bridge.Config.Gpu;
+        var smu = bridge.Config.Smu;
+        var fan = bridge.Config.Fan;
+
+        return string.Join('|', new object?[]
+        {
+            scene ?? "-",
+            profile.CpuMaxFrequency, profile.CpuTurbo,
+            soft.AcEpp, soft.DcEpp, soft.AcCpMinCores, soft.DcCpMinCores, soft.AcBoostMode, soft.DcBoostMode,
+            gpu.PowerLimit, gpu.GpuClock, gpu.MemoryClock,
+            gpu.CoreClockOffsetMhz, gpu.MemoryClockOffsetMhz,
+            app.BootAdvancedGPUSystem, app.BootGpuUseAdvancedOffsets,
+            app.BootSetRyzenSumCurveOptimizerAll, app.BootSetRyzenSmuCurveOptimizerPerCore,
+            smu.CurveOptimizerAll, string.Join(",", smu.CurveOptimizerPerCore),
+            fan.ApplyFanOnModeChange, fan.QuietModeFanRpm,
+            fan.PerformanceModeFanRpm, fan.BalanceModeFanRpm,
+        });
+    }
+
+    /// <summary>
+    /// 电源方案被 Windows 改掉后，把频率上限、软调度、GPU 功耗墙写回去。
+    /// 每次下发要起约 11 个 powercfg 子进程，所以按「目标变化 / 5 分钟兜底 / force(睡眠唤醒)」节流，
+    /// 不再每个保活周期无条件重写。
+    /// </summary>
+    internal static void ReapplyProcessorPolicy(bool force = false)
     {
         try
         {
@@ -321,10 +379,25 @@ public sealed class CpuPowerKeepAliveService : IDisposable
             var keep = bridge.CpuPowerKeepAlive;
             var profile = bridge.Config.Cpu.Active;
             var soft = keep.GetEffectiveSoftSchedule(profile.SoftSchedule);
+            string? scene = keep.TransientScene;
+
+            string signature = BuildPolicySignature(bridge, profile, soft, scene);
+            long now = Environment.TickCount64;
+            lock (_policyLock)
+            {
+                bool due = force
+                           || _lastPolicySignature != signature
+                           || now - _lastPolicyAppliedTick >= PolicyRebaseMs;
+                if (!due)
+                    return;
+
+                _lastPolicySignature = signature;
+                _lastPolicyAppliedTick = now;
+            }
+
             bool turbo = keep.HasTransientOverride || profile.CpuTurbo;
             bridge.Power.ApplySoftSchedule(soft, turbo);
 
-            string? scene = keep.TransientScene;
             uint mhz = scene switch
             {
                 "Portable135" => 4500,

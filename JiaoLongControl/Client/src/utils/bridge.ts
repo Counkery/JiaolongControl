@@ -311,7 +311,6 @@ export interface BridgeApi {
   Power: {
     SetCPUMaxFrequency(mhz: number): HostBridgePromise<void>
     ResetCPUMaxFrequency(): HostBridgePromise<void>
-    SetCPUMaxState(percent: number): HostBridgePromise<void>
     DisableTurbo(): HostBridgePromise<void>
     EnableTurbo(): HostBridgePromise<void>
     ApplySoftSchedule(
@@ -324,7 +323,6 @@ export interface BridgeApi {
       turboEnabled: boolean,
     ): HostBridgePromise<void>
     GetCPUMaxFrequency(): HostBridgePromise<{ ac: number; dc: number }>
-    GetCPUMaxState(): HostBridgePromise<number>
     GetTurboEnabled(): HostBridgePromise<{
       ac: boolean
       dc: boolean
@@ -480,7 +478,9 @@ export const CPU = {
 export const Fan = {
   GetFanSpeed: () => cached(CACHE_TTL_MS, 'Fan.GetFanSpeed', () => call(raw.Fan.GetFanSpeed())),
   /** 进阶：Blding 强制设速（软件曲线用） */
-  SetFanSpeed: (fanSpeed: number) => call(raw.Fan.SetFanSpeed(toByte(fanSpeed / 100))),
+  // 100 不整除时不能过 toByte(会抛异常), 这里按百分比四舍五入并夹到 0-255
+  SetFanSpeed: (fanSpeed: number) =>
+    call(raw.Fan.SetFanSpeed(Math.max(0, Math.min(255, Math.round(fanSpeed / 100))))),
   RemoveFanSpeed: () => call(raw.Fan.RemoveFanSpeed()),
   RestoreEcAutoFan: () => call(raw.Fan.RestoreEcAutoFan()),
   GetMaxFanSpeedSwitch: () => call(raw.Fan.GetMaxFanSpeedSwitch()),
