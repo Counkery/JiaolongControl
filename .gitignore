@@ -52,3 +52,5 @@ publish/
 # 发布构建产物
 artifacts/
 
+# 助手本地工作记忆
+.workbuddy/
